@@ -1,0 +1,92 @@
+import os
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+load_dotenv()
+
+supabase: Client = create_client(
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_KEY"],
+)
+
+
+def get_suspect(name: str) -> dict | None:
+    result = supabase.table("suspects").select("*").ilike("name", f"%{name}%").limit(1).execute()
+    return result.data[0] if result.data else None
+
+
+def get_suspect_cases(name: str) -> list:
+    junctions = (
+        supabase.table("suspect_cases").select("case_id").eq("suspect_name", name).execute()
+    )
+    if not junctions.data:
+        return []
+    case_ids = [j["case_id"] for j in junctions.data]
+    result = supabase.table("cases").select("*").in_("case_id", case_ids).execute()
+    return result.data or []
+
+
+def get_suspect_evidence(name: str) -> list:
+    junctions = (
+        supabase.table("evidence_suspects")
+        .select("evidence_title")
+        .eq("suspect_name", name)
+        .execute()
+    )
+    if not junctions.data:
+        return []
+    titles = [j["evidence_title"] for j in junctions.data]
+    result = supabase.table("evidence").select("*").in_("title", titles).execute()
+    return result.data or []
+
+
+def get_case(case_id: str) -> dict | None:
+    result = (
+        supabase.table("cases").select("*").eq("case_id", case_id).limit(1).execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def get_gang_members(cluster: str) -> list:
+    result = supabase.table("gang_members").select("*").eq("cluster", cluster).execute()
+    return result.data or []
+
+
+def get_hotspots() -> list:
+    result = supabase.table("hotspots").select("*").execute()
+    return result.data or []
+
+
+def get_recent_arrests(limit: int = 6) -> list:
+    result = (
+        supabase.table("arrests")
+        .select("*")
+        .order("arrest_date", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def get_entity_data(workspace: str, entity: str | None) -> dict | None:
+    """Fetch relevant entity data based on workspace type, passed to the responder for context."""
+    if not entity:
+        return None
+
+    if workspace == "suspect":
+        suspect = get_suspect(entity)
+        if not suspect:
+            return None
+        return {
+            "suspect": suspect,
+            "cases": get_suspect_cases(entity),
+            "evidence": get_suspect_evidence(entity),
+        }
+
+    if workspace == "case":
+        return {"case": get_case(entity)}
+
+    if workspace == "network":
+        return {"gang_members": get_gang_members("Cluster K-7")}
+
+    return None

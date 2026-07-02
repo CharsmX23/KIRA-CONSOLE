@@ -14,6 +14,7 @@ import { EntityDrawer } from './components/drawers/EntityDrawer';
 import { EvidenceDrawer } from './components/drawers/EvidenceDrawer';
 import { Lang, t } from './i18n/translations';
 import { INITIAL_CHAT, RECENT_ARRESTS } from './data';
+import { sendChat } from './services/kiraApi';
 
 // --------------- types ---------------
 type WorkspaceType = 'supervision' | 'suspect' | 'case' | 'evidence_review' | 'network' | 'trend' | 'arrests' | 'today_cases';
@@ -26,8 +27,23 @@ interface InvestigationProgress {
   networkLoaded: boolean; recommendationLoaded: boolean;
 }
 
-// --------------- stage sequence ---------------
-const buildStages = (lang: Lang) => [
+// --------------- module-level constants ---------------
+const SESSION_ID = crypto.randomUUID();
+
+const WORKSPACE_LABELS: Record<string, string> = {
+  supervision: 'Supervision',
+  suspect: 'Suspect',
+  case: 'Case',
+  network: 'Network',
+  evidence: 'Evidence Review',
+  evidence_review: 'Evidence Review',
+  trend: 'Trend Analysis',
+  arrests: 'Recent Arrests',
+  today_cases: 'Cases Filed Today',
+};
+
+// --------------- stage sequence (used by investigation animation) ---------------
+const buildStages = () => [
   { agent: 'Router Agent', narration: { en: 'Query received. Activating investigation mode.', kn: 'ಪ್ರಶ್ನೆ ಸ್ವೀಕೃತ. ತನಿಖಾ ಮೋಡ್ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗುತ್ತಿದೆ.' }, duration: 600, apply: (p: InvestigationProgress) => ({ ...p, modeActivated: true }) },
   { agent: 'Suspect Agent', narration: { en: 'R. Mehta is a repeat offender linked to Cluster K-7. Risk: HIGH.', kn: 'R. ಮೆಹ್ತಾ ಪುನರಾವರ್ತಿತ ಅಪರಾಧಿ, Cluster K-7ಗೆ ಸಂಬಂಧಿಸಿದ. ಅಪಾಯ: ಹೆಚ್ಚು.' }, duration: 1400, apply: (p: InvestigationProgress) => ({ ...p, profileLoaded: true }) },
   { agent: 'Case Agent', narration: { en: 'Cross-referencing case records. Two active investigations found — KS1207, KS1189.', kn: 'ಪ್ರಕರಣ ದಾಖಲೆಗಳ ಹೋಲಿಕೆ. ಎರಡು ಸಕ್ರಿಯ ತನಿಖೆಗಳು — KS1207, KS1189.' }, duration: 1400, apply: (p: InvestigationProgress) => ({ ...p, casesLoaded: true }) },
@@ -42,18 +58,6 @@ const RESET_PROGRESS: InvestigationProgress = {
   modeActivated: false, profileLoaded: false, casesLoaded: false,
   evidenceLoaded: false, evidenceNodesShown: 0, networkLoaded: false, recommendationLoaded: false,
 };
-
-function routeQuery(query: string): { ws: WorkspaceType; label: string; subject?: string } {
-  const q = query.toLowerCase();
-  if (q.includes('arrest')) return { ws: 'arrests', label: 'Recent Arrests' };
-  if (q.includes('cases today') || q.includes('active cases')) return { ws: 'today_cases', label: 'Cases Filed Today' };
-  if (q.includes('network') || q.includes('cluster') || q.includes('gang') || q.includes('narcotics')) return { ws: 'network', label: 'Network' };
-  if (q.includes('cyber fraud') || q.includes('trend') || q.includes('cybercrime')) return { ws: 'trend', label: 'Trend Analysis' };
-  if (q.includes('evidence fail') || q.includes('why did evidence') || q.includes('evidence review')) return { ws: 'evidence_review', label: 'Evidence Review' };
-  if (q.includes('whitefield') || q.includes('hotspot') || q.includes('emerging')) return { ws: 'supervision', label: 'Supervision' };
-  // Default: suspect workspace for anything person-related
-  return { ws: 'suspect', label: 'Suspect', subject: 'R. Mehta' };
-}
 
 export default function App() {
   const [lang, setLang] = useState<Lang>('en');
@@ -73,21 +77,20 @@ export default function App() {
   const [entityDrawer, setEntityDrawer] = useState<string | null>(null);
 
   const replayRef = useRef<boolean>(false);
+  // Tracks which workspace the last SSE signal targeted, so onNarration knows
+  // whether to manage the agent pill list (suspect workspace manages its own).
+  const lastSignalWorkspace = useRef<WorkspaceType | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
   }, []);
 
-  // TODO: Replace this client-side simulation with a FastAPI SSE stream.
-  // Backend emits: {"event":"profile_complete","data":{...}}
-  //                {"event":"cases_complete","data":{...}}
-  //                {"event":"evidence_node","data":{index, ...}}  (x6)
-  //                {"event":"network_complete","data":{...}}
-  //                {"event":"recommendation_complete","data":{...}}
-  const runInvestigationReplay = useCallback(async (voiceMode: boolean) => {
+  // silent=true: run the visual animation (progress + agent pills) without
+  // adding per-stage chat messages — used when the backend narration handles chat.
+  const runInvestigationReplay = useCallback(async (voiceMode: boolean, silent = false) => {
     replayRef.current = true;
     setProgress(RESET_PROGRESS);
-    const stages = buildStages(lang);
+    const stages = buildStages();
     const agents = stages.map(s => ({ name: s.agent, status: 'pending' as const }));
     setActiveAgents(agents);
     setShowAgentList(true);
@@ -97,7 +100,9 @@ export default function App() {
       const stage = stages[i];
 
       setActiveAgents(prev => prev.map((a, idx) => idx === i ? { ...a, status: 'running' } : a));
-      setChat(prev => [...prev, { role: 'ai', text: stage.narration[lang], isVoice: voiceMode }]);
+      if (!silent) {
+        setChat(prev => [...prev, { role: 'ai', text: stage.narration[lang], isVoice: voiceMode }]);
+      }
 
       if (stage.agent === 'Evidence Agent') {
         for (let n = 1; n <= 6; n++) {
@@ -122,36 +127,53 @@ export default function App() {
     const query = input.trim();
     if (!query) return;
 
+    // Cancel any in-flight replay before starting a new request.
     replayRef.current = false;
     await sleep(50);
 
     setChat(prev => [...prev, { role: 'officer', text: query }]);
     setInput('');
 
-    const route = routeQuery(query);
-    setWorkspace(route.ws);
-    setWorkspaceLabel(route.label);
-    setSubjectName(route.subject);
+    sendChat(
+      query,
+      SESSION_ID,
+      lang,
+      // onSignal — fires ~200ms after submit; switch workspace immediately
+      (signal: { workspace: string; action: string; entity: string | null; agentsRunning: string[]; confidence: number; lang: string }) => {
+        // Map backend 'evidence' → frontend 'evidence_review'
+        const ws = (signal.workspace === 'evidence' ? 'evidence_review' : signal.workspace) as WorkspaceType;
+        lastSignalWorkspace.current = ws;
 
-    if (route.ws === 'supervision') {
-      setChat(prev => [...prev, { role: 'ai', text: 'Displaying supervision overview with current hotspot analysis.' }]);
-      return;
-    }
+        setWorkspace(ws);
+        setWorkspaceLabel(WORKSPACE_LABELS[ws] ?? ws);
 
-    if (route.ws === 'suspect') {
-      setIsVoice(false);
-      await runInvestigationReplay(false);
-    } else {
-      const responses: Record<string, string> = {
-        arrests: 'Displaying recent arrest log. 6 records retrieved.',
-        today_cases: 'Loading cases filed today. 6 active cases found.',
-        network: 'Mapping Cluster K-7 network. 7 members, 3 levels identified.',
-        trend: 'Loading trend analysis. Cybercrime up 22%, financial fraud up 17% projected.',
-        evidence_review: 'Loading evidence review for Case KS1176. 4 weaknesses identified.',
-      };
-      setChat(prev => [...prev, { role: 'ai', text: responses[route.ws] ?? 'Loading workspace...' }]);
-    }
-  }, [input, runInvestigationReplay]);
+        if (signal.entity) {
+          setSubjectName(signal.entity);
+          if (ws === 'case') setCaseId(signal.entity);
+        }
+
+        if (ws === 'suspect') {
+          setIsVoice(false);
+          // Run animation without stage chat messages; AI narration handles chat.
+          runInvestigationReplay(false, true);
+        } else {
+          setActiveAgents((signal.agentsRunning ?? []).map((name: string) => ({ name, status: 'running' as const })));
+          setShowAgentList(true);
+        }
+      },
+      // onNarration — fires ~1-2s after submit; add real AI text to chat
+      (text: string) => {
+        setChat(prev => [...prev, { role: 'ai', text }]);
+        // For suspect workspace the replay manages agent pills; leave them alone.
+        if (lastSignalWorkspace.current !== 'suspect') {
+          setActiveAgents(prev => prev.map(a => ({ ...a, status: 'complete' as const })));
+          setTimeout(() => setShowAgentList(false), 2000);
+        }
+      },
+      // onDone — session state managed by backend
+      (_sessionId: string) => {},
+    );
+  }, [input, lang, runInvestigationReplay]);
 
   const handleVoice = useCallback(async () => {
     if (voiceState !== 'idle') return;
@@ -243,7 +265,6 @@ export default function App() {
     setEntityDrawer(null);
   }, []);
 
-  // Quick prompt handler: map prompt text to query
   const handleSetInput = useCallback((text: string) => {
     setInput(text);
   }, []);
