@@ -68,6 +68,49 @@ async def get_history(session_id: str, limit: int = 8) -> list[dict]:
     return messages
 
 
+async def get_audit_entries(limit: int = 50) -> list[dict]:
+    """
+    Audit trail — recent messages across all sessions with workspace signal context.
+    """
+    result = (
+        supabase.table("messages")
+        .select("id, session_id, role, content, workspace_signal, created_at")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    messages = result.data or []
+
+    session_ids = list({m["session_id"] for m in messages})
+    if not session_ids:
+        return []
+
+    sessions_result = (
+        supabase.table("sessions")
+        .select("id, lang, current_workspace, current_entity")
+        .in_("id", session_ids)
+        .execute()
+    )
+    session_map = {s["id"]: s for s in (sessions_result.data or [])}
+
+    enriched = []
+    for m in messages:
+        sess = session_map.get(m["session_id"], {})
+        ws_signal = m.get("workspace_signal") or {}
+        enriched.append({
+            "id": m["id"],
+            "session_id": m["session_id"][:8] + "…",
+            "role": m["role"],
+            "content": m["content"],
+            "workspace": ws_signal.get("workspace") or sess.get("current_workspace", "—"),
+            "entity": ws_signal.get("entity") or sess.get("current_entity"),
+            "confidence": ws_signal.get("confidence"),
+            "lang": sess.get("lang", "en"),
+            "created_at": m["created_at"],
+        })
+    return enriched
+
+
 async def get_recent_context_string(session_id: str) -> str:
     """
     Get last 3 exchanges as a plain string for the router.

@@ -8,9 +8,11 @@ interface HeaderProps {
   workspaceLabel: string;
   subjectName?: string;
   onBack: () => void;
+  onExportReport?: () => void;
+  onAudit?: () => void;
 }
 
-export function Header({ lang, workspace, workspaceLabel, subjectName, onBack }: HeaderProps) {
+export function Header({ lang, workspace, workspaceLabel, subjectName, onBack, onExportReport, onAudit }: HeaderProps) {
   const [now, setNow] = useState(new Date());
   const isSupervision = workspace === 'supervision';
 
@@ -24,8 +26,8 @@ export function Header({ lang, workspace, workspaceLabel, subjectName, onBack }:
 
   return (
     <div style={{
-      background: '#0A1120',
-      borderBottom: '1px solid #162035',
+      background: 'var(--bg-surface, #0D1117)',
+      borderBottom: '1px solid var(--border-subtle, #1E2D3D)',
       padding: '0 16px',
       height: 48,
       display: 'flex',
@@ -36,20 +38,20 @@ export function Header({ lang, workspace, workspaceLabel, subjectName, onBack }:
       {/* Left: Logo + mode */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <img src="/ksp_emblem_transparent.png" alt="KSP" style={{ height: 32, width: 'auto', flexShrink: 0 }} />
-        <span style={{ fontSize: 16, fontWeight: 800, color: '#60A5FA', letterSpacing: '0.04em', fontFamily: 'sans-serif' }}>
+        <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--accent-blue, #4D9EF5)', letterSpacing: '0.08em', fontFamily: 'var(--font-mono)' }}>
           KIRA CONSOLE
         </span>
 
         {isSupervision ? (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            background: 'rgba(34,197,94,0.1)',
-            border: '1px solid rgba(34,197,94,0.3)',
+            background: 'rgba(46,204,113,0.1)',
+            border: '1px solid rgba(46,204,113,0.3)',
             borderRadius: 4,
             padding: '3px 8px',
           }}>
-            <span className="blink" style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }} />
-            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#86EFAC', letterSpacing: '0.1em' }}>
+            <span className="blink" style={{ width: 6, height: 6, borderRadius: '50%', background: '#2ECC71', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#86EFAC', fontWeight: 600, letterSpacing: '0.12em' }}>
               {t('supervisionMode', lang)}
             </span>
           </div>
@@ -59,9 +61,9 @@ export function Header({ lang, workspace, workspaceLabel, subjectName, onBack }:
               onClick={onBack}
               style={{
                 display: 'flex', alignItems: 'center', gap: 4,
-                background: 'transparent', border: '1px solid #1E2D45',
+                background: 'transparent', border: '1px solid #243447',
                 borderRadius: 4, padding: '3px 8px', cursor: 'pointer',
-                color: '#64748B', fontSize: 11, fontFamily: 'monospace',
+                color: '#64748B', fontSize: 11, fontFamily: "'JetBrains Mono', monospace",
               }}
             >
               <ChevronLeft size={12} />
@@ -69,34 +71,49 @@ export function Header({ lang, workspace, workspaceLabel, subjectName, onBack }:
             </button>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 5,
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.3)',
+              background: 'rgba(240,78,78,0.1)',
+              border: '1px solid rgba(240,78,78,0.3)',
               borderRadius: 4, padding: '3px 8px',
             }}>
-              <span className="blink-fast" style={{ width: 6, height: 6, borderRadius: '50%', background: '#EF4444', display: 'inline-block' }} />
-              <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#FCA5A5', letterSpacing: '0.1em' }}>
+              <span className="blink-fast" style={{ width: 6, height: 6, borderRadius: '50%', background: '#F04E4E', display: 'inline-block' }} />
+              <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#FCA5A5', fontWeight: 600, letterSpacing: '0.12em' }}>
                 {t('investigationMode', lang)}
               </span>
             </div>
-            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748B' }}>
+            <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#64748B' }}>
               › {t('supervision', lang)} › {workspaceLabel}{subjectName ? ` › ${subjectName}` : ''}
             </span>
-            <button style={{ background: 'transparent', border: '1px solid #1E2D45', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#64748B', fontSize: 11, fontFamily: 'monospace' }}>
+            <button style={{ background: 'transparent', border: '1px solid #243447', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#64748B', fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}>
               {t('fullFile', lang)}
             </button>
-            <button style={{ background: 'transparent', border: '1px solid #1E2D45', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#64748B', fontSize: 11, fontFamily: 'monospace' }}>
+            <button
+              onClick={onExportReport}
+              style={{ background: 'transparent', border: '1px solid #243447', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', color: '#64748B', fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}
+            >
               {t('exportReport', lang)}
             </button>
           </div>
         )}
       </div>
 
-      {/* Right: time + org */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <span style={{ fontFamily: 'monospace', color: '#64748B', fontSize: 11 }}>
+      {/* Right: audit button + time + org */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          onClick={onAudit}
+          style={{
+            background: workspace === 'audit' ? 'rgba(77,158,245,0.15)' : 'transparent',
+            border: `1px solid ${workspace === 'audit' ? '#4D9EF5' : '#243447'}`,
+            borderRadius: 4, padding: '3px 10px', cursor: 'pointer',
+            color: workspace === 'audit' ? '#4D9EF5' : '#64748B',
+            fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, letterSpacing: '0.08em',
+          }}
+        >
+          AUDIT
+        </button>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontSize: 11 }}>
           {dateStr} · {timeStr}
         </span>
-        <span style={{ color: '#334155', fontSize: 11 }}>
+        <span style={{ color: '#4A5C70', fontSize: 11 }}>
           {t('karnatakaSP', lang)}
         </span>
       </div>

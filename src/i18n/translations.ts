@@ -120,6 +120,7 @@ export const T = {
   listeningStatus: { en: 'Listening... Speak now', kn: 'ಕೇಳುತ್ತಿದ್ದೇನೆ... ಮಾತನಾಡಿ' },
   transcribing: { en: 'Transcribing...', kn: 'ಲಿಪ್ಯಂತರಣ...' },
   processing: { en: 'Processing...', kn: 'ಪ್ರಕ್ರಿಯೆ...' },
+  tapToStop: { en: 'tap to stop', kn: 'ನಿಲ್ಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ' },
 
   // Drawers
   openFullInvestigation: { en: 'Open Full Investigation', kn: 'ಸಂಪೂರ್ಣ ತನಿಖೆ ತೆರೆಯಿರಿ' },

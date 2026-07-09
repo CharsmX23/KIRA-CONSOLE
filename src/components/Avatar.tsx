@@ -43,16 +43,16 @@ export function Avatar({ name, size, riskRing, square = false, initials }: Avata
           borderRadius: square ? radius : '50%',
           border: `2px solid ${riskRing}`,
           boxShadow: `0 0 14px ${riskRing}33`,
-          background: 'radial-gradient(circle at center, #1a2744, #060A12)',
+          background: 'radial-gradient(circle at center, #1a2744, #080C14)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}>
           <span style={{
-            fontFamily: 'monospace',
+            fontFamily: "'JetBrains Mono', monospace",
             fontWeight: 700,
             fontSize: size * 0.3,
-            color: '#E2E8F0',
+            color: '#E8EDF2',
             letterSpacing: '0.05em',
           }}>{fallbackInitials}</span>
         </div>

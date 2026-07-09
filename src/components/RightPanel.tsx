@@ -1,6 +1,12 @@
 import { useRef, useEffect, useCallback } from 'react';
-import { Mic, Shield } from 'lucide-react';
+import { Mic, MicOff, Shield, Volume2, VolumeX } from 'lucide-react';
 import { Lang, t } from '../i18n/translations';
+
+function scaledFontSize(baseSize: number, lang: string): number {
+  return lang === 'kn' ? baseSize + 3 : baseSize;
+}
+
+const kn = (lang: string) => lang === 'kn';
 
 interface ChatMessage {
   role: 'officer' | 'ai';
@@ -22,15 +28,19 @@ interface RightPanelProps {
   onAnalyze: () => void;
   onVoice: () => void;
   voiceState: 'idle' | 'listening' | 'transcribing' | 'processing';
+  listening: boolean;
+  interimTranscript: string;
+  browserSupportsSpeechRecognition: boolean;
   activeAgents: AgentStatus[];
   showAgentList: boolean;
+  isMuted: boolean;
+  onToggleMute: () => void;
 }
-
-const STATIC_AGENTS = ['Router Agent', 'Suspect Agent', 'Case Agent', 'Evidence Agent', 'Network Agent', 'Recommendation Agent'];
 
 export function RightPanel({
   lang, setLang, chat, input, setInput, onAnalyze, onVoice,
-  voiceState, activeAgents, showAgentList,
+  voiceState, listening, interimTranscript, browserSupportsSpeechRecognition,
+  activeAgents, showAgentList, isMuted, onToggleMute,
 }: RightPanelProps) {
   const chatRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -39,7 +49,7 @@ export function RightPanel({
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  }, [chat]);
+  }, [chat, interimTranscript]);
 
   const handleKey = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -55,12 +65,18 @@ export function RightPanel({
     t('recentArrests', lang),
   ];
 
+  const agentStatusColor = (status: AgentStatus['status']) => {
+    if (status === 'complete') return 'var(--accent-green, #2ECC71)';
+    if (status === 'running') return 'var(--accent-blue, #4D9EF5)';
+    return 'var(--text-muted, #8B9EB5)';
+  };
+
   return (
     <div style={{
       width: '30%',
       minWidth: 280,
-      background: '#0A1120',
-      borderLeft: '1px solid #1E2D45',
+      background: 'var(--bg-surface, #0D1117)',
+      borderLeft: '1px solid var(--border-default, #243447)',
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
@@ -69,33 +85,55 @@ export function RightPanel({
       {/* Header */}
       <div style={{
         padding: '12px 14px 10px',
-        borderBottom: '1px solid #1E2D45',
+        borderBottom: '1px solid var(--border-default, #243447)',
         flexShrink: 0,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#60A5FA', letterSpacing: '0.04em' }}>
-              KIRA <span style={{ fontWeight: 400, color: '#94A3B8' }}>— {t('conversationalAI', lang)}</span>
+            <div style={{
+              fontSize: 14, fontWeight: 800,
+              color: 'var(--accent-blue, #4D9EF5)',
+              letterSpacing: '0.08em',
+            }}>
+              KIRA <span style={{ fontWeight: 400, color: 'var(--text-secondary, #94A3B8)' }}>— {t('conversationalAI', lang)}</span>
             </div>
-            <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-tertiary, #64748B)', marginTop: 2, letterSpacing: '0.04em' }}>
               {t('policeIntelligence', lang)}
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span className="blink" style={{ width: 7, height: 7, borderRadius: '50%', background: '#22C55E', display: 'inline-block', boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
-              <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#22C55E', letterSpacing: '0.08em' }}>{t('online', lang)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="blink" style={{ width: 7, height: 7, borderRadius: '50%', background: '#2ECC71', display: 'inline-block', boxShadow: '0 0 6px rgba(46,204,113,0.6)' }} />
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#2ECC71', fontWeight: 600, letterSpacing: '0.08em' }}>{t('online', lang)}</span>
+              {isMuted && (
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#D9827E', fontWeight: 700, letterSpacing: '0.1em', background: 'rgba(220,38,38,0.12)', padding: '2px 5px', borderRadius: 3 }}>
+                  🔇 MUTED
+                </span>
+              )}
             </div>
-            {/* Language toggle */}
-            <div style={{ display: 'flex', gap: 4 }}>
+            {/* Language toggle + mute button */}
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <button
+                onClick={onToggleMute}
+                title={isMuted ? 'Unmute AI voice' : 'Mute AI voice'}
+                style={{
+                  background: isMuted ? 'rgba(220,38,38,0.15)' : 'transparent',
+                  border: `1px solid ${isMuted ? '#C24A4A' : 'var(--border-default, #243447)'}`,
+                  borderRadius: 4, padding: '3px 7px', cursor: 'pointer',
+                  color: isMuted ? '#D9827E' : 'var(--text-tertiary, #64748B)',
+                  display: 'flex', alignItems: 'center',
+                }}
+              >
+                {isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+              </button>
               {(['en', 'kn'] as Lang[]).map(l => (
                 <button
                   key={l}
                   onClick={() => setLang(l)}
                   style={{
-                    background: lang === l ? '#60A5FA' : 'transparent',
-                    color: lang === l ? '#fff' : '#64748B',
-                    border: `1px solid ${lang === l ? '#60A5FA' : '#1E2D45'}`,
+                    background: lang === l ? 'var(--accent-blue, #4D9EF5)' : 'transparent',
+                    color: lang === l ? '#fff' : 'var(--text-tertiary, #64748B)',
+                    border: `1px solid ${lang === l ? 'var(--accent-blue, #4D9EF5)' : 'var(--border-default, #243447)'}`,
                     borderRadius: 9999,
                     padding: '2px 9px',
                     fontSize: 11,
@@ -112,6 +150,24 @@ export function RightPanel({
         </div>
       </div>
 
+      {/* Browser unsupported banner */}
+      {!browserSupportsSpeechRecognition && (
+        <div style={{
+          background: 'rgba(245, 166, 35, 0.08)',
+          borderBottom: '1px solid rgba(245, 166, 35, 0.25)',
+          padding: '6px 14px',
+          fontSize: 11,
+          color: 'var(--risk-medium-text, #FCD34D)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexShrink: 0,
+        }}>
+          <MicOff size={12} />
+          Voice input requires Chrome or Edge
+        </div>
+      )}
+
       {/* Chat area */}
       <div
         ref={chatRef}
@@ -119,7 +175,7 @@ export function RightPanel({
         style={{
           flex: 1,
           overflowY: 'auto',
-          background: '#060A12',
+          background: 'var(--bg-base, #080C14)',
           padding: '12px 10px',
           display: 'flex',
           flexDirection: 'column',
@@ -129,39 +185,68 @@ export function RightPanel({
         {chat.map((msg, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: msg.role === 'officer' ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: 6 }}>
             {msg.role === 'ai' && (
-              <Shield size={14} color="#60A5FA" style={{ flexShrink: 0, marginTop: 2 }} />
+              <Shield size={14} color="var(--accent-blue, #4D9EF5)" style={{ flexShrink: 0, marginTop: 3 }} />
             )}
             <div style={{
-              maxWidth: '80%',
-              background: msg.role === 'officer' ? '#162035' : 'transparent',
-              color: msg.role === 'officer' ? '#E2E8F0' : '#93C5FD',
-              fontSize: 14,
-              lineHeight: 1.8,
-              padding: msg.role === 'officer' ? '14px 18px' : '4px 0',
-              borderRadius: 6,
+              maxWidth: '82%',
+              background: msg.role === 'officer' ? 'var(--bg-overlay, #111827)' : 'transparent',
+              borderLeft: msg.role === 'officer' ? '2px solid var(--border-default, #243447)' : undefined,
+              color: msg.role === 'officer' ? 'var(--text-primary, #E8EDF2)' : '#93C5FD',
+              fontSize: scaledFontSize(13, lang),
+              lineHeight: kn(lang) ? 1.9 : 1.7,
+              fontFamily: kn(lang) ? "'Noto Sans Kannada', 'Inter', sans-serif" : undefined,
+              padding: msg.role === 'officer' ? '10px 14px' : '4px 0',
+              borderRadius: msg.role === 'officer' ? '0 6px 6px 0' : 0,
             }}>
               {msg.text}
+              {msg.isVoice && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6, fontSize: 10, color: 'var(--text-tertiary, #64748B)' }}>
+                  <Mic size={9} />
+                </span>
+              )}
             </div>
           </div>
         ))}
 
-        {voiceState === 'listening' && (
-          <div style={{ textAlign: 'center', padding: '8px 0' }}>
-            <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#22C55E' }}>
-              {t('listeningStatus', lang)}
+        {/* Interim transcript — shows what's being heard in real-time */}
+        {listening && interimTranscript && (
+          <div style={{ display: 'flex', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 6 }}>
+            <div style={{
+              maxWidth: '82%',
+              background: 'rgba(240, 78, 78, 0.06)',
+              borderLeft: '2px solid rgba(240, 78, 78, 0.4)',
+              color: 'var(--text-secondary, #94A3B8)',
+              fontSize: scaledFontSize(13, lang),
+              lineHeight: kn(lang) ? 1.9 : 1.7,
+              fontFamily: kn(lang) ? "'Noto Sans Kannada', 'Inter', sans-serif" : undefined,
+              padding: '10px 14px',
+              borderRadius: '0 6px 6px 0',
+              fontStyle: 'italic',
+            }}>
+              {interimTranscript}
+            </div>
+          </div>
+        )}
+
+        {/* Listening strip */}
+        {listening && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            padding: '8px 12px', marginTop: 4,
+            background: 'rgba(240, 78, 78, 0.06)',
+            border: '1px solid rgba(240, 78, 78, 0.2)',
+            borderRadius: 6,
+          }}>
+            <span className="blink" style={{ width: 6, height: 6, borderRadius: '50%', background: '#F04E4E', display: 'inline-block' }} />
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--risk-high-text, #FCA5A5)', fontWeight: 600, letterSpacing: '0.12em' }}>
+              {lang === 'kn' ? 'ಕೇಳುತ್ತಿದ್ದೇನೆ' : 'LISTENING'} · {t('tapToStop', lang)}
             </span>
           </div>
         )}
-        {voiceState === 'transcribing' && (
-          <div style={{ textAlign: 'center', padding: '8px 0' }}>
-            <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#F59E0B' }}>
-              {t('transcribing', lang)}
-            </span>
-          </div>
-        )}
+
         {voiceState === 'processing' && (
           <div style={{ textAlign: 'center', padding: '8px 0' }}>
-            <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#60A5FA' }}>
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-blue, #4D9EF5)', fontWeight: 600, letterSpacing: '0.08em' }}>
               {t('processing', lang)}
             </span>
           </div>
@@ -169,21 +254,31 @@ export function RightPanel({
       </div>
 
       {/* Agent status or quick prompts */}
-      <div style={{ padding: '8px 12px', borderTop: '1px solid #162035', flexShrink: 0 }}>
+      <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle, #1E2D3D)', flexShrink: 0 }}>
         {showAgentList && activeAgents.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {activeAgents.map((a, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  fontSize: 11,
-                  color: a.status === 'complete' ? '#22C55E' : a.status === 'running' ? '#60A5FA' : '#334155',
-                  fontFamily: 'monospace',
-                  display: 'inline-block',
-                  animation: a.status === 'running' ? 'spin 1s linear infinite' : undefined,
-                }}>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span
+                  className={a.status === 'running' ? 'agent-spin' : undefined}
+                  style={{
+                    fontSize: 10,
+                    color: agentStatusColor(a.status),
+                    fontFamily: 'var(--font-mono)',
+                    display: 'inline-block',
+                    width: 14,
+                    textAlign: 'center',
+                    lineHeight: 1,
+                  }}
+                >
                   {a.status === 'complete' ? '✓' : a.status === 'running' ? '⟳' : '○'}
                 </span>
-                <span style={{ fontSize: 11, fontFamily: 'monospace', color: a.status === 'complete' ? '#94A3B8' : a.status === 'running' ? '#93C5FD' : '#334155' }}>
+                <span style={{
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  color: agentStatusColor(a.status),
+                  letterSpacing: '0.02em',
+                }}>
                   {a.name}
                 </span>
               </div>
@@ -191,7 +286,7 @@ export function RightPanel({
           </div>
         ) : (
           <>
-            <div style={{ fontSize: 9, color: '#64748B', letterSpacing: '0.1em', fontFamily: 'monospace', marginBottom: 6 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-tertiary, #64748B)', fontWeight: 600, letterSpacing: '0.12em', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
               {t('quickPrompts', lang)}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -200,26 +295,27 @@ export function RightPanel({
                   key={i}
                   onClick={() => setInput(p)}
                   style={{
-                    background: '#0D1828',
-                    border: '1px solid #162035',
+                    background: 'var(--bg-raised, #131920)',
+                    border: '1px solid var(--border-subtle, #1E2D3D)',
                     borderRadius: 9999,
                     padding: '6px 10px',
-                    fontSize: 12,
-                    color: '#64748B',
+                    fontSize: scaledFontSize(12, lang),
+                    fontFamily: kn(lang) ? "'Noto Sans Kannada', 'Inter', sans-serif" : undefined,
+                    color: 'var(--text-tertiary, #64748B)',
                     cursor: 'pointer',
                     transition: 'all 0.15s',
-                    height: 40,
+                    height: kn(lang) ? 46 : 40,
                     display: 'flex',
                     alignItems: 'center',
                     lineHeight: 1,
                   }}
                   onMouseEnter={e => {
-                    (e.target as HTMLButtonElement).style.borderColor = '#60A5FA';
-                    (e.target as HTMLButtonElement).style.color = '#60A5FA';
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent-blue, #4D9EF5)';
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-blue, #4D9EF5)';
                   }}
                   onMouseLeave={e => {
-                    (e.target as HTMLButtonElement).style.borderColor = '#162035';
-                    (e.target as HTMLButtonElement).style.color = '#64748B';
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-subtle, #1E2D3D)';
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-tertiary, #64748B)';
                   }}
                 >
                   {p}
@@ -233,7 +329,7 @@ export function RightPanel({
       {/* Input area */}
       <div style={{
         padding: '10px 12px 12px',
-        borderTop: '1px solid #1E2D45',
+        borderTop: '1px solid var(--border-default, #243447)',
         flexShrink: 0,
       }}>
         <textarea
@@ -245,16 +341,16 @@ export function RightPanel({
           rows={3}
           style={{
             width: '100%',
-            background: '#060A12',
-            border: '1px solid #1E2D45',
+            background: 'var(--bg-base, #080C14)',
+            border: '1px solid var(--border-default, #243447)',
             borderRadius: 8,
-            color: '#E2E8F0',
-            fontSize: 14,
+            color: 'var(--text-primary, #E8EDF2)',
+            fontSize: scaledFontSize(14, lang),
             padding: '10px 12px',
             resize: 'none',
             outline: 'none',
-            fontFamily: 'inherit',
-            lineHeight: 1.5,
+            fontFamily: kn(lang) ? "'Noto Sans Kannada', 'Inter', sans-serif" : 'inherit',
+            lineHeight: kn(lang) ? 1.8 : 1.5,
           }}
         />
         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -262,22 +358,27 @@ export function RightPanel({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <button
               onClick={onVoice}
-              className={voiceState === 'listening' ? 'glow-pulse-blue' : 'glow-pulse-blue'}
+              disabled={!browserSupportsSpeechRecognition}
+              className={listening ? 'mic-listening' : undefined}
               style={{
                 width: 48, height: 48,
                 borderRadius: '50%',
-                background: '#1E2D45',
-                border: '1px solid #334155',
-                cursor: 'pointer',
+                background: listening ? 'rgba(240, 78, 78, 0.15)' : 'var(--bg-raised, #243447)',
+                border: listening ? '1px solid rgba(240, 78, 78, 0.5)' : '1px solid var(--border-default, #4A5C70)',
+                cursor: browserSupportsSpeechRecognition ? 'pointer' : 'not-allowed',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                transition: 'background 0.2s, border-color 0.2s',
+                opacity: browserSupportsSpeechRecognition ? 1 : 0.4,
               }}
             >
-              <Mic size={18} color="#60A5FA" />
+              <Mic size={18} color={listening ? '#F04E4E' : 'var(--accent-blue, #4D9EF5)'} />
             </button>
-            <span style={{ fontSize: 9, color: '#64748B' }}>{t('voice', lang)}</span>
+            <span style={{ fontSize: 9, color: 'var(--text-tertiary, #64748B)', fontFamily: 'var(--font-mono)' }}>
+              {listening ? (lang === 'kn' ? 'ನಿಲ್ಲಿಸಿ' : 'STOP') : t('voice', lang)}
+            </span>
           </div>
           {/* Analyze button */}
           <button
@@ -287,13 +388,14 @@ export function RightPanel({
               height: 48,
               background: '#1D4ED8',
               color: '#fff',
-              fontSize: 14,
+              fontSize: scaledFontSize(14, lang),
+              fontFamily: kn(lang) ? "'Noto Sans Kannada', 'Inter', sans-serif" : undefined,
               fontWeight: 600,
               border: 'none',
               borderRadius: 6,
               cursor: 'pointer',
               transition: 'background 0.15s',
-              letterSpacing: '0.02em',
+              letterSpacing: kn(lang) ? '0' : '0.02em',
             }}
             onMouseEnter={e => (e.currentTarget.style.background = '#1E40AF')}
             onMouseLeave={e => (e.currentTarget.style.background = '#1D4ED8')}

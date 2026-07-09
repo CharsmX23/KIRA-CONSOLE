@@ -2,6 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Elevation ramp */
+  --bg-base: #080C14;
+  --bg-surface: #0D1117;
+  --bg-raised: #131920;
+  --bg-overlay: #111827;
+  --border-subtle: #1E2D3D;
+  --border-default: #243447;
+
+  /* Text tiers */
+  --text-primary: #E8EDF2;
+  --text-secondary: #94A3B8;
+  --text-tertiary: #64748B;
+  --text-muted: #8B9EB5;
+
+  /* Accent */
+  --accent-blue: #4D9EF5;
+  --accent-blue-dim: rgba(77, 158, 245, 0.12);
+  --accent-blue-border: rgba(77, 158, 245, 0.25);
+  --accent-green: #2ECC71;
+  --accent-green-dim: rgba(46, 204, 113, 0.12);
+  --accent-purple: #8B6FD4;
+  --accent-purple-dim: rgba(139, 111, 212, 0.12);
+
+  /* Risk */
+  --risk-high: #F04E4E;
+  --risk-high-text: #FCA5A5;
+  --risk-high-bg: rgba(240, 78, 78, 0.12);
+  --risk-high-border: rgba(240, 78, 78, 0.35);
+  --risk-medium: #F5A623;
+  --risk-medium-text: #FCD34D;
+  --risk-medium-bg: rgba(245, 166, 35, 0.12);
+  --risk-medium-border: rgba(245, 166, 35, 0.35);
+  --risk-low: #2ECC71;
+  --risk-low-text: #86EFAC;
+  --risk-low-bg: rgba(46, 204, 113, 0.12);
+  --risk-low-border: rgba(46, 204, 113, 0.35);
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -14,8 +56,8 @@ html, body, #root {
 }
 
 body {
-  background: #060A12;
-  color: #E2E8F0;
+  background: #080C14;
+  color: #E8EDF2;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -26,18 +68,18 @@ body {
 }
 
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 78, 78, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(240, 78, 78, 0); }
 }
 
 @keyframes glow-pulse-blue {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(96, 165, 250, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(77, 158, 245, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(77, 158, 245, 0); }
 }
 
 @keyframes glow-pulse-amber {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(245, 166, 35, 0); }
 }
 
 @keyframes fade-up {
@@ -75,6 +117,16 @@ body {
   to { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 78, 78, 0.7); }
+  50% { box-shadow: 0 0 0 10px rgba(240, 78, 78, 0); }
+}
+
+@keyframes agent-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .blink { animation: blink 1.5s infinite; }
 .blink-fast { animation: blink 1.2s infinite; }
 .glow-pulse-red { animation: glow-pulse 2.5s infinite; }
@@ -82,6 +134,8 @@ body {
 .glow-pulse-amber { animation: glow-pulse-amber 2s infinite; }
 .fade-up { animation: fadeUpIn 0.5s ease-out both; }
 .spin { animation: spin 1s linear infinite; }
+.agent-spin { animation: agent-spin 0.8s linear infinite; }
+.mic-listening { animation: mic-pulse 1.2s ease-out infinite; }
 .slide-in-right { animation: slideInRight 0.3s ease-out both; }
 
 .left-panel-scroll {
@@ -94,11 +148,11 @@ body {
 }
 
 .left-panel-scroll::-webkit-scrollbar-track {
-  background: #060A12;
+  background: #080C14;
 }
 
 .left-panel-scroll::-webkit-scrollbar-thumb {
-  background: #1E2D45;
+  background: #243447;
   border-radius: 2px;
 }
 
@@ -107,11 +161,11 @@ body {
 }
 
 .chat-scroll::-webkit-scrollbar-track {
-  background: #060A12;
+  background: #080C14;
 }
 
 .chat-scroll::-webkit-scrollbar-thumb {
-  background: #162035;
+  background: #1E2D3D;
   border-radius: 2px;
 }
 
@@ -161,60 +215,60 @@ body {
 
 /* Leaflet dark overrides */
 .leaflet-container {
-  background: #060A12 !important;
-  font-family: monospace !important;
+  background: #080C14 !important;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 .leaflet-control-attribution {
-  background: rgba(6,10,18,0.8) !important;
-  color: #334155 !important;
+  background: rgba(8,12,20,0.8) !important;
+  color: #4A5C70 !important;
   font-size: 9px !important;
 }
 .leaflet-control-attribution a {
-  color: #475569 !important;
+  color: #8B9EB5 !important;
 }
 .leaflet-bar {
-  background: #0D1828 !important;
-  border: 1px solid #162035 !important;
+  background: #131920 !important;
+  border: 1px solid #1E2D3D !important;
 }
 .leaflet-bar a {
-  background: #0D1828 !important;
+  background: #131920 !important;
   color: #94A3B8 !important;
-  border-bottom: 1px solid #162035 !important;
+  border-bottom: 1px solid #1E2D3D !important;
 }
 .leaflet-bar a:hover {
-  background: #162035 !important;
-  color: #E2E8F0 !important;
+  background: #1E2D3D !important;
+  color: #E8EDF2 !important;
 }
 .leaflet-popup-content-wrapper {
-  background: #0D1828 !important;
-  border: 1px solid #1E2D45 !important;
-  color: #E2E8F0 !important;
+  background: #131920 !important;
+  border: 1px solid #243447 !important;
+  color: #E8EDF2 !important;
   border-radius: 6px !important;
   box-shadow: 0 4px 24px rgba(0,0,0,0.6) !important;
 }
 .leaflet-popup-tip {
-  background: #0D1828 !important;
+  background: #131920 !important;
 }
 .leaflet-popup-close-button {
   color: #64748B !important;
 }
 .kira-popup .leaflet-popup-content-wrapper {
-  background: #0D1828 !important;
-  border: 1px solid #1E2D45 !important;
+  background: #131920 !important;
+  border: 1px solid #243447 !important;
   border-radius: 6px !important;
   box-shadow: 0 4px 24px rgba(0,0,0,0.8) !important;
   padding: 0 !important;
 }
 .kira-popup .leaflet-popup-content {
   margin: 12px 14px !important;
-  color: #E2E8F0 !important;
-  font-family: monospace !important;
+  color: #E8EDF2 !important;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 .kira-popup .leaflet-popup-tip-container .leaflet-popup-tip {
-  background: #1E2D45 !important;
+  background: #243447 !important;
 }
 .kira-popup .leaflet-popup-close-button {
-  color: #475569 !important;
+  color: #8B9EB5 !important;
   font-size: 16px !important;
   top: 4px !important;
   right: 6px !important;

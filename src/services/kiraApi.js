@@ -4,7 +4,7 @@ const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
  * Send a query to KIRA conversational AI.
  *
  * onSignal(signal)   → called immediately with workspace routing (~200ms)
- * onNarration(text)  → called with AI response text (~1-2s)
+ * onNarration(text, lang, mapAction)  → called with AI response text (~1-2s)
  * onDone(session_id) → called when stream is complete
  */
 export function sendChat(query, sessionId, lang, onSignal, onNarration, onDone) {
@@ -42,7 +42,7 @@ export function sendChat(query, sessionId, lang, onSignal, onNarration, onDone) 
           }
 
           if (msg.event === 'narration') {
-            onNarration(msg.text, msg.lang);
+            onNarration(msg.text, msg.lang, msg.map_action || null);
           }
 
           if (msg.event === 'done') {

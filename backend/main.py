@@ -13,6 +13,7 @@ from memory.supabase_memory import (
     save_message,
     get_history,
     get_recent_context_string,
+    get_audit_entries,
 )
 from db.entities import (
     get_entity_data,
@@ -27,6 +28,31 @@ from schemas.models import ChatRequest
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# --------------- map navigation helpers ---------------
+_LOCATION_MAP: dict[str, dict] = {
+    "whitefield":     {"lat": 12.9698, "lng": 77.7500, "zoom": 15, "label": "Whitefield"},
+    "koramangala":    {"lat": 12.9352, "lng": 77.6245, "zoom": 15, "label": "Koramangala"},
+    "electronic city":{"lat": 12.8452, "lng": 77.6602, "zoom": 14, "label": "Electronic City"},
+    "shivajinagar":   {"lat": 12.9857, "lng": 77.6057, "zoom": 15, "label": "Shivajinagar"},
+    "mg road":        {"lat": 12.9716, "lng": 77.5946, "zoom": 16, "label": "MG Road"},
+    "indiranagar":    {"lat": 12.9719, "lng": 77.6412, "zoom": 15, "label": "Indiranagar"},
+    "yeshwanthpur":   {"lat": 13.0284, "lng": 77.5541, "zoom": 14, "label": "Yeshwanthpur"},
+    "bangalore":      {"lat": 12.9716, "lng": 77.5946, "zoom": 11, "label": "Bangalore"},
+    "bengaluru":      {"lat": 12.9716, "lng": 77.5946, "zoom": 11, "label": "Bengaluru"},
+}
+_NAV_KEYWORDS = {"zoom", "show", "focus", "center", "map", "hotspot", "go to", "take me", "navigate", "where is", "locate", "fly to"}
+
+def extract_map_action(query: str) -> dict | None:
+    """Return map coordinates if the query is a location/navigation request."""
+    q = query.lower()
+    if not any(kw in q for kw in _NAV_KEYWORDS):
+        return None
+    for loc, coords in _LOCATION_MAP.items():
+        if loc in q:
+            return coords
+    return None
+
 
 app = FastAPI(title="KIRA Console — Conversational AI Backend")
 
@@ -104,12 +130,11 @@ async def chat(req: ChatRequest):
             lang=lang,
         )
 
-        # Event 2: AI narration text
-        narration_event = {
-            "event": "narration",
-            "text": narration,
-            "lang": lang,
-        }
+        # Event 2: AI narration text + optional map action
+        narration_event: dict = {"event": "narration", "text": narration, "lang": lang}
+        map_action = extract_map_action(req.query)
+        if map_action:
+            narration_event["map_action"] = map_action
         yield f"data: {json.dumps(narration_event)}\n\n"
 
         await update_session(session_id, target_workspace, entity)
@@ -160,6 +185,65 @@ async def get_hotspots_endpoint():
 @app.get("/api/arrests")
 async def get_arrests():
     return get_recent_arrests()
+
+
+@app.get("/api/alerts")
+async def get_alerts():
+    """
+    Rule-based proactive alert generation from live Supabase data.
+    Applies thresholds to hotspot + arrest data to surface actionable intelligence.
+    """
+    from datetime import datetime
+    hotspots = get_hotspots()
+    arrests = get_recent_arrests(3)
+
+    alerts = []
+    now = datetime.now().strftime("%I:%M %p")
+
+    # Rule 1: Emerging high-risk hotspots → immediate surge alert
+    for h in hotspots:
+        if h.get("emerging") and h.get("risk_score", 0) >= 8.5:
+            alerts.append({
+                "severity": "critical",
+                "border": "#F04E4E",
+                "title": f"SURGE ALERT — {h['name']}",
+                "body": f"{h['incidents']} incidents detected · {h['crime_type']} cluster flagged · Deploy patrol units",
+                "time": now,
+            })
+
+    # Rule 2: Non-emerging high risk_score hotspots → escalation watch
+    for h in hotspots:
+        if not h.get("emerging") and h.get("risk_score", 0) >= 7.0:
+            alerts.append({
+                "severity": "high",
+                "border": "#F5A623",
+                "title": f"ESCALATION WATCH — {h['name']}",
+                "body": f"{h['incidents']} weekly incidents · {h['crime_type']} · Risk score {h['risk_score']:.1f}/10",
+                "time": now,
+            })
+
+    # Rule 3: Recent arrest intelligence
+    if arrests:
+        a = arrests[0]
+        alerts.append({
+            "severity": "info",
+            "border": "#4D9EF5",
+            "title": f"ARREST INTELLIGENCE — {a.get('suspect_name', 'Unknown')}",
+            "body": f"{a.get('charge', '')} · {a.get('location', '')} · Case {a.get('case_id', '')} updated",
+            "time": a.get("arrest_date", now),
+        })
+
+    return {"alerts": alerts[:5], "generated_at": now}
+
+
+@app.get("/api/audit")
+async def get_audit_log(limit: int = 50):
+    """
+    Audit trail — recent officer queries and AI responses across all sessions,
+    enriched with workspace routing context and session metadata.
+    """
+    entries = await get_audit_entries(limit)
+    return {"entries": entries, "total": len(entries)}
 
 
 @app.get("/health")
