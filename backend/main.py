@@ -1,8 +1,11 @@
 import uuid
 import json
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+import jwt as pyjwt
+from jwt import PyJWKClient
 
 from agents.router import classify_intent
 from agents.responder import generate_response, AGENT_SETS
@@ -22,6 +25,7 @@ from db.entities import (
     get_suspect,
     get_suspect_cases,
     get_suspect_evidence,
+    get_user_profile,
 )
 from schemas.models import ChatRequest
 
@@ -29,19 +33,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+# PyJWKClient fetches Supabase's public JWKS, caches keys, and auto-selects
+# the right key per token `kid`. Supports ES256 (asymmetric) out of the box.
+_jwks_client = PyJWKClient(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json", cache_keys=True)
+
 # --------------- map navigation helpers ---------------
 _LOCATION_MAP: dict[str, dict] = {
-    "whitefield":     {"lat": 12.9698, "lng": 77.7500, "zoom": 15, "label": "Whitefield"},
-    "koramangala":    {"lat": 12.9352, "lng": 77.6245, "zoom": 15, "label": "Koramangala"},
-    "electronic city":{"lat": 12.8452, "lng": 77.6602, "zoom": 14, "label": "Electronic City"},
-    "shivajinagar":   {"lat": 12.9857, "lng": 77.6057, "zoom": 15, "label": "Shivajinagar"},
-    "mg road":        {"lat": 12.9716, "lng": 77.5946, "zoom": 16, "label": "MG Road"},
-    "indiranagar":    {"lat": 12.9719, "lng": 77.6412, "zoom": 15, "label": "Indiranagar"},
-    "yeshwanthpur":   {"lat": 13.0284, "lng": 77.5541, "zoom": 14, "label": "Yeshwanthpur"},
-    "bangalore":      {"lat": 12.9716, "lng": 77.5946, "zoom": 11, "label": "Bangalore"},
-    "bengaluru":      {"lat": 12.9716, "lng": 77.5946, "zoom": 11, "label": "Bengaluru"},
+    "whitefield":      {"lat": 12.9698, "lng": 77.7500, "zoom": 15, "label": "Whitefield"},
+    "koramangala":     {"lat": 12.9352, "lng": 77.6245, "zoom": 15, "label": "Koramangala"},
+    "electronic city": {"lat": 12.8452, "lng": 77.6602, "zoom": 14, "label": "Electronic City"},
+    "shivajinagar":    {"lat": 12.9857, "lng": 77.6057, "zoom": 15, "label": "Shivajinagar"},
+    "mg road":         {"lat": 12.9716, "lng": 77.5946, "zoom": 16, "label": "MG Road"},
+    "indiranagar":     {"lat": 12.9719, "lng": 77.6412, "zoom": 15, "label": "Indiranagar"},
+    "yeshwanthpur":    {"lat": 13.0284, "lng": 77.5541, "zoom": 14, "label": "Yeshwanthpur"},
+    "bangalore":       {"lat": 12.9716, "lng": 77.5946, "zoom": 11, "label": "Bangalore"},
+    "bengaluru":       {"lat": 12.9716, "lng": 77.5946, "zoom": 11, "label": "Bengaluru"},
 }
 _NAV_KEYWORDS = {"zoom", "show", "focus", "center", "map", "hotspot", "go to", "take me", "navigate", "where is", "locate", "fly to"}
+
 
 def extract_map_action(query: str) -> dict | None:
     """Return map coordinates if the query is a location/navigation request."""
@@ -54,6 +64,58 @@ def extract_map_action(query: str) -> dict | None:
     return None
 
 
+# --------------- auth dependency ---------------
+
+async def get_current_user(authorization: str = Header(None)) -> dict:
+    """Validate the Supabase JWT and return the authenticated officer's profile."""
+    if not authorization or not authorization.startswith("Bearer "):
+        print("[KIRA backend] get_current_user: missing or malformed Authorization header")
+        raise HTTPException(status_code=401, detail="Missing authentication token")
+
+    token = authorization.split(" ", 1)[1]
+    print(f"[KIRA backend] get_current_user: decoding token (prefix: {token[:20]}…)")
+
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(token)
+        payload = pyjwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["ES256", "RS256"],
+            audience="authenticated",
+        )
+        user_id = payload["sub"]
+        exp = payload.get("exp")
+        print(f"[KIRA backend] get_current_user: token valid — user_id={user_id}, exp={exp}")
+    except pyjwt.ExpiredSignatureError:
+        print("[KIRA backend] get_current_user: token EXPIRED")
+        raise HTTPException(status_code=401, detail="Token has expired — please sign in again")
+    except Exception as e:
+        print(f"[KIRA backend] get_current_user: token decode failed — {e}")
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
+
+    profile = get_user_profile(user_id)
+    if not profile:
+        print(f"[KIRA backend] get_current_user: no profile found for user_id={user_id}")
+        raise HTTPException(status_code=403, detail="No officer profile found for this account")
+
+    print(f"[KIRA backend] get_current_user: authorized — {profile['full_name']} ({profile['role']})")
+    return {
+        "user_id": user_id,
+        "role": profile["role"],
+        "full_name": profile["full_name"],
+        "badge_number": profile.get("badge_number"),
+    }
+
+
+_POLICYMAKER_SUSPECT_BLOCK = (
+    "Individual suspect records are restricted for your role. "
+    "Aggregate cluster statistics are available — would you like a "
+    "summary of Cluster K-7 activity instead?"
+)
+
+
+# --------------- app ---------------
+
 app = FastAPI(title="KIRA Console — Conversational AI Backend")
 
 app.add_middleware(
@@ -65,14 +127,17 @@ app.add_middleware(
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user)):
     """
     Main conversational AI endpoint.
     Streams two SSE events:
       1. workspace_signal (~200ms) — Cerebras router result, triggers frontend animation
       2. narration (~1-2s)        — Gemini response text for the chat panel
+    Requires a valid Supabase JWT. Enforces role-based content restrictions.
     """
     session_id = req.session_id or str(uuid.uuid4())
+    user_id = current_user["user_id"]
+    officer_role = current_user["role"]
 
     async def generate():
         session = await get_or_create_session(session_id, req.lang)
@@ -86,8 +151,7 @@ async def chat(req: ChatRequest):
                 lang = "kn"
 
         context_string = await get_recent_context_string(session_id)
-
-        await save_message(session_id, "officer", req.query)
+        await save_message(session_id, "officer", req.query, user_id=user_id)
 
         routing = await classify_intent(
             query=req.query,
@@ -106,7 +170,24 @@ async def chat(req: ChatRequest):
 
         agents_running = AGENT_SETS.get(target_workspace, [])
 
-        # Event 1: routing signal — arrives immediately, frontend switches workspace
+        # Policymaker restriction: block individual suspect queries
+        if officer_role == "policymaker" and target_workspace == "suspect":
+            signal_event = {
+                "event": "workspace_signal",
+                "workspace": "supervision",
+                "action": "stay",
+                "entity": None,
+                "agents_running": [],
+                "confidence": 1.0,
+                "lang": lang,
+            }
+            yield f"data: {json.dumps(signal_event)}\n\n"
+            yield f"data: {json.dumps({'event': 'narration', 'text': _POLICYMAKER_SUSPECT_BLOCK, 'lang': lang})}\n\n"
+            await save_message(session_id, "ai", _POLICYMAKER_SUSPECT_BLOCK, user_id=user_id)
+            yield f"data: {json.dumps({'event': 'done', 'session_id': session_id})}\n\n"
+            return
+
+        # Event 1: routing signal
         signal_event = {
             "event": "workspace_signal",
             "workspace": target_workspace,
@@ -145,7 +226,7 @@ async def chat(req: ChatRequest):
             "entity": entity,
             "confidence": confidence,
         }
-        await save_message(session_id, "ai", narration, workspace_signal_record)
+        await save_message(session_id, "ai", narration, user_id=user_id, workspace_signal=workspace_signal_record)
 
         yield f"data: {json.dumps({'event': 'done', 'session_id': session_id})}\n\n"
 
@@ -162,7 +243,6 @@ async def chat(req: ChatRequest):
 
 @app.get("/api/session/{session_id}")
 async def get_session(session_id: str):
-    """Get current session state and last 20 messages."""
     session = await get_or_create_session(session_id)
     history = await get_history(session_id, limit=20)
     return {"session": session, "history": history}
@@ -189,45 +269,35 @@ async def get_arrests():
 
 @app.get("/api/alerts")
 async def get_alerts():
-    """
-    Rule-based proactive alert generation from live Supabase data.
-    Applies thresholds to hotspot + arrest data to surface actionable intelligence.
-    """
+    """Rule-based proactive alert generation from live Supabase data."""
     from datetime import datetime
     hotspots = get_hotspots()
     arrests = get_recent_arrests(3)
-
     alerts = []
     now = datetime.now().strftime("%I:%M %p")
 
-    # Rule 1: Emerging high-risk hotspots → immediate surge alert
     for h in hotspots:
         if h.get("emerging") and h.get("risk_score", 0) >= 8.5:
             alerts.append({
-                "severity": "critical",
-                "border": "#F04E4E",
+                "severity": "critical", "border": "#F04E4E",
                 "title": f"SURGE ALERT — {h['name']}",
                 "body": f"{h['incidents']} incidents detected · {h['crime_type']} cluster flagged · Deploy patrol units",
                 "time": now,
             })
 
-    # Rule 2: Non-emerging high risk_score hotspots → escalation watch
     for h in hotspots:
         if not h.get("emerging") and h.get("risk_score", 0) >= 7.0:
             alerts.append({
-                "severity": "high",
-                "border": "#F5A623",
+                "severity": "high", "border": "#F5A623",
                 "title": f"ESCALATION WATCH — {h['name']}",
                 "body": f"{h['incidents']} weekly incidents · {h['crime_type']} · Risk score {h['risk_score']:.1f}/10",
                 "time": now,
             })
 
-    # Rule 3: Recent arrest intelligence
     if arrests:
         a = arrests[0]
         alerts.append({
-            "severity": "info",
-            "border": "#4D9EF5",
+            "severity": "info", "border": "#4D9EF5",
             "title": f"ARREST INTELLIGENCE — {a.get('suspect_name', 'Unknown')}",
             "body": f"{a.get('charge', '')} · {a.get('location', '')} · Case {a.get('case_id', '')} updated",
             "time": a.get("arrest_date", now),
@@ -237,12 +307,18 @@ async def get_alerts():
 
 
 @app.get("/api/audit")
-async def get_audit_log(limit: int = 50):
+async def get_audit_log(
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Audit trail — recent officer queries and AI responses across all sessions,
-    enriched with workspace routing context and session metadata.
+    Audit trail. Supervisors see all officers' history; others see only their own.
     """
-    entries = await get_audit_entries(limit)
+    entries = await get_audit_entries(
+        limit=limit,
+        requesting_user_id=current_user["user_id"],
+        requesting_role=current_user["role"],
+    )
     return {"entries": entries, "total": len(entries)}
 
 

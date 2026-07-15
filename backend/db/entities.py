@@ -4,10 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-supabase: Client = create_client(
-    os.environ["SUPABASE_URL"],
-    os.environ["SUPABASE_KEY"],
-)
+_service_key = os.environ.get("SUPABASE_SERVICE_KEY")
+if not _service_key or _service_key == "PASTE_SERVICE_ROLE_KEY_HERE":
+    raise RuntimeError(
+        "SUPABASE_SERVICE_KEY is not set in backend/.env. "
+        "Get it from: Supabase Dashboard → Project Settings → API → service_role key"
+    )
+
+supabase: Client = create_client(os.environ["SUPABASE_URL"], _service_key)
 
 
 def get_suspect(name: str) -> dict | None:
@@ -66,6 +70,13 @@ def get_recent_arrests(limit: int = 6) -> list:
         .execute()
     )
     return result.data or []
+
+
+def get_user_profile(user_id: str) -> dict | None:
+    print(f"[KIRA entities] get_user_profile: querying profiles for user_id={user_id!r} (type={type(user_id).__name__})")
+    result = supabase.table("profiles").select("id, full_name, role, badge_number").eq("id", user_id).limit(1).execute()
+    print(f"[KIRA entities] get_user_profile: raw result.data={result.data!r}")
+    return result.data[0] if result.data else None
 
 
 def get_entity_data(workspace: str, entity: str | None) -> dict | None:

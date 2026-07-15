@@ -6,7 +6,7 @@ load_dotenv()
 
 supabase: Client = create_client(
     os.environ["SUPABASE_URL"],
-    os.environ["SUPABASE_KEY"],
+    os.environ["SUPABASE_SERVICE_KEY"],
 )
 
 
@@ -40,15 +40,19 @@ async def save_message(
     session_id: str,
     role: str,
     content: str,
+    user_id: str | None = None,
     workspace_signal: dict | None = None,
 ):
-    """Save a message to conversation history."""
-    supabase.table("messages").insert({
+    """Save a message to conversation history, linked to the authenticated officer."""
+    row: dict = {
         "session_id": session_id,
         "role": role,
         "content": content,
         "workspace_signal": workspace_signal,
-    }).execute()
+    }
+    if user_id:
+        row["user_id"] = user_id
+    supabase.table("messages").insert(row).execute()
 
 
 async def get_history(session_id: str, limit: int = 8) -> list[dict]:
@@ -68,35 +72,58 @@ async def get_history(session_id: str, limit: int = 8) -> list[dict]:
     return messages
 
 
-async def get_audit_entries(limit: int = 50) -> list[dict]:
+async def get_audit_entries(
+    limit: int = 50,
+    requesting_user_id: str | None = None,
+    requesting_role: str | None = None,
+) -> list[dict]:
     """
-    Audit trail — recent messages across all sessions with workspace signal context.
+    Audit trail — recent messages across sessions, enriched with officer identity.
+    Supervisors see all entries; other roles see only their own (filtered by user_id).
     """
-    result = (
+    query = (
         supabase.table("messages")
-        .select("id, session_id, role, content, workspace_signal, created_at")
+        .select("id, session_id, role, content, workspace_signal, user_id, created_at")
         .order("created_at", desc=True)
         .limit(limit)
-        .execute()
     )
+
+    # Non-supervisors see only their own messages
+    if requesting_role != "supervisor" and requesting_user_id:
+        query = query.eq("user_id", requesting_user_id)
+
+    result = query.execute()
     messages = result.data or []
 
-    session_ids = list({m["session_id"] for m in messages})
-    if not session_ids:
-        return []
+    # Collect unique user_ids to batch-fetch profiles
+    user_ids = list({m["user_id"] for m in messages if m.get("user_id")})
+    profile_map: dict[str, dict] = {}
+    if user_ids:
+        profiles_result = (
+            supabase.table("profiles")
+            .select("id, full_name, role, badge_number")
+            .in_("id", user_ids)
+            .execute()
+        )
+        profile_map = {p["id"]: p for p in (profiles_result.data or [])}
 
-    sessions_result = (
-        supabase.table("sessions")
-        .select("id, lang, current_workspace, current_entity")
-        .in_("id", session_ids)
-        .execute()
-    )
-    session_map = {s["id"]: s for s in (sessions_result.data or [])}
+    # Collect session metadata for workspace context
+    session_ids = list({m["session_id"] for m in messages})
+    session_map: dict[str, dict] = {}
+    if session_ids:
+        sessions_result = (
+            supabase.table("sessions")
+            .select("id, lang, current_workspace, current_entity")
+            .in_("id", session_ids)
+            .execute()
+        )
+        session_map = {s["id"]: s for s in (sessions_result.data or [])}
 
     enriched = []
     for m in messages:
         sess = session_map.get(m["session_id"], {})
         ws_signal = m.get("workspace_signal") or {}
+        profile = profile_map.get(m.get("user_id", ""), {})
         enriched.append({
             "id": m["id"],
             "session_id": m["session_id"][:8] + "…",
@@ -107,6 +134,9 @@ async def get_audit_entries(limit: int = 50) -> list[dict]:
             "confidence": ws_signal.get("confidence"),
             "lang": sess.get("lang", "en"),
             "created_at": m["created_at"],
+            "officer_name": profile.get("full_name"),
+            "officer_role": profile.get("role"),
+            "officer_badge": profile.get("badge_number"),
         })
     return enriched
 

@@ -1,18 +1,28 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, LogOut } from 'lucide-react';
 import { Lang, t } from '../i18n/translations';
+import { UserProfile } from '../lib/supabase';
 
 interface HeaderProps {
   lang: Lang;
   workspace: string;
   workspaceLabel: string;
   subjectName?: string;
+  profile: UserProfile | null;
   onBack: () => void;
   onExportReport?: () => void;
   onAudit?: () => void;
+  onSignOut: () => void;
 }
 
-export function Header({ lang, workspace, workspaceLabel, subjectName, onBack, onExportReport, onAudit }: HeaderProps) {
+const ROLE_COLOR: Record<string, string> = {
+  investigator: '#4D9EF5',
+  analyst: '#8B6FD4',
+  supervisor: '#F5A623',
+  policymaker: '#2ECC71',
+};
+
+export function Header({ lang, workspace, workspaceLabel, subjectName, profile, onBack, onExportReport, onAudit, onSignOut }: HeaderProps) {
   const [now, setNow] = useState(new Date());
   const isSupervision = workspace === 'supervision';
 
@@ -96,7 +106,7 @@ export function Header({ lang, workspace, workspaceLabel, subjectName, onBack, o
         )}
       </div>
 
-      {/* Right: audit button + time + org */}
+      {/* Right: officer identity + audit + time + logout */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button
           onClick={onAudit}
@@ -110,12 +120,40 @@ export function Header({ lang, workspace, workspaceLabel, subjectName, onBack, o
         >
           AUDIT
         </button>
+
         <span style={{ fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontSize: 11 }}>
           {dateStr} · {timeStr}
         </span>
-        <span style={{ color: '#4A5C70', fontSize: 11 }}>
-          {t('karnatakaSP', lang)}
-        </span>
+
+        {/* Officer identity */}
+        {profile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 12, borderLeft: '1px solid #1E2D3D' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, color: '#E8EDF2', fontWeight: 600, lineHeight: 1.2 }}>
+                {profile.full_name}
+              </div>
+              <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.06em', lineHeight: 1.2, marginTop: 1 }}>
+                <span style={{ color: ROLE_COLOR[profile.role] ?? '#64748B', fontWeight: 700 }}>
+                  {profile.role.toUpperCase()}
+                </span>
+                {profile.badge_number && (
+                  <span style={{ color: '#4A5C70' }}> · {profile.badge_number}</span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onSignOut}
+              title="Sign out"
+              style={{
+                background: 'transparent', border: '1px solid #243447',
+                borderRadius: 4, padding: '4px 7px', cursor: 'pointer',
+                color: '#64748B', display: 'flex', alignItems: 'center',
+              }}
+            >
+              <LogOut size={13} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

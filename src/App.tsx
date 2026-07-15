@@ -3,6 +3,7 @@ import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognitio
 import { Header } from './components/Header';
 import { RightPanel } from './components/RightPanel';
 import { Toast } from './components/Toast';
+import { LoginScreen } from './components/LoginScreen';
 import { SupervisionWorkspace } from './workspaces/SupervisionWorkspace';
 import { InvestigationWorkspace } from './workspaces/InvestigationWorkspace';
 import { CaseWorkspace } from './workspaces/CaseWorkspace';
@@ -17,6 +18,7 @@ import { EvidenceDrawer } from './components/drawers/EvidenceDrawer';
 import { Lang, t } from './i18n/translations';
 import { INITIAL_CHAT, RECENT_ARRESTS } from './data';
 import { sendChat } from './services/kiraApi';
+import { supabase, UserProfile } from './lib/supabase';
 
 // --------------- types ---------------
 type WorkspaceType = 'supervision' | 'suspect' | 'case' | 'evidence_review' | 'network' | 'trend' | 'arrests' | 'today_cases' | 'audit';
@@ -78,6 +80,38 @@ const RESET_PROGRESS: InvestigationProgress = {
 };
 
 export default function App() {
+  // --------------- auth state ---------------
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    console.log('[KIRA App] Auth init: calling getSession()');
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        if (session) {
+          console.log('[KIRA App] Session restored — user_id:', session.user.id, '| fetching profile');
+          const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+          console.log('[KIRA App] Session profile →', data ? `OK role=${(data as UserProfile).role}` : 'NULL — showing login');
+          if (data) setProfile(data as UserProfile);
+        } else {
+          console.log('[KIRA App] No session — showing login screen');
+        }
+        setAuthLoading(false);
+      })
+      .catch((err) => {
+        console.error('[KIRA App] getSession() threw:', err);
+        setAuthLoading(false);
+      });
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) console.error('[KIRA] Logout error:', error);
+    // Hard reload guarantees no stale session survives in memory
+    window.location.href = '/';
+  }, []);
+
+  // --------------- app state ---------------
   const [lang, setLang] = useState<Lang>('en');
   const [workspace, setWorkspace] = useState<WorkspaceType>('supervision');
   const [workspaceLabel, setWorkspaceLabel] = useState('Supervision');
@@ -107,7 +141,6 @@ export default function App() {
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
 
-  // Queued voice query — set when speech ends, consumed by submitQuery effect
   const pendingVoiceQuery = useRef<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -125,8 +158,6 @@ export default function App() {
     });
   }, []);
 
-  // silent=true: run the visual animation (progress + agent pills) without
-  // adding per-stage chat messages — used when the backend narration handles chat.
   const runInvestigationReplay = useCallback(async (voiceMode: boolean, silent = false) => {
     replayRef.current = true;
     setProgress(RESET_PROGRESS);
@@ -163,9 +194,6 @@ export default function App() {
     setShowAgentList(false);
   }, [lang]);
 
-  // TTS — speak AI narration aloud after voice-initiated queries.
-  // Cleans markdown from the text before speaking; the visual chat bubble
-  // keeps the original formatted text unchanged. Respects the mute toggle.
   const speakNarration = useCallback((text: string, responseLang: string) => {
     if (isMuted || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -179,9 +207,9 @@ export default function App() {
     });
   }, [isMuted]);
 
-  // Core submit logic — shared between text input and voice
   const submitQuery = useCallback((query: string, isVoice = false) => {
     if (!query) return;
+    console.log('[KIRA step 6] Query submitted:', query);
     replayRef.current = false;
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setChat(prev => [...prev, { role: 'officer', text: query, isVoice }]);
@@ -208,7 +236,9 @@ export default function App() {
         }
       },
       (text: string, responseLang?: string, mapAct?: MapAction | null) => {
+        console.log('[KIRA step 15] Narration received — length:', text.length, '| lang:', responseLang);
         setChat(prev => [...prev, { role: 'ai', text }]);
+        console.log('[KIRA step 16] Narration displayed in chat');
         if (isVoice) speakNarration(text, responseLang ?? lang);
         if (mapAct) setMapAction(mapAct);
         if (lastSignalWorkspace.current !== 'suspect') {
@@ -226,7 +256,6 @@ export default function App() {
     submitQuery(query, false);
   }, [input, submitQuery]);
 
-  // Voice — push-to-talk toggle
   const handleVoice = useCallback(() => {
     if (!browserSupportsSpeechRecognition) return;
     if (listening) {
@@ -245,7 +274,6 @@ export default function App() {
     }
   }, [listening, finalTranscript, lang, resetTranscript, browserSupportsSpeechRecognition, submitQuery]);
 
-  // Auto-submit when speech stops naturally (continuous=false, browser auto-stops)
   useEffect(() => {
     if (!listening && voiceState === 'listening') {
       const q = finalTranscript.trim();
@@ -272,33 +300,53 @@ export default function App() {
   }, []);
 
   const handleGangMemberClick = useCallback((name: string) => {
+    if (profile?.role === 'policymaker') {
+      showToast('Restricted for your role.');
+      return;
+    }
     if (name === 'R. Mehta') return;
     setEvidenceDrawer(null);
     setEntityDrawer(name);
     showToast(`${name} — ${t('fileNotLoaded', lang)}`);
-  }, [lang, showToast]);
+  }, [lang, showToast, profile]);
 
   const handleEntitySuspectClick = useCallback((name: string) => {
+    if (profile?.role === 'policymaker') {
+      showToast('Restricted for your role.');
+      return;
+    }
     setEvidenceDrawer(null);
     setEntityDrawer(name);
-  }, []);
+  }, [showToast, profile]);
 
   const handleCaseClick = useCallback((id: string) => {
+    if (profile?.role === 'policymaker') {
+      showToast('Restricted for your role.');
+      return;
+    }
     setCaseId(id);
     setWorkspace('case');
     setWorkspaceLabel('Case');
     setSubjectName(id);
     setEvidenceDrawer(null);
     setEntityDrawer(null);
-  }, []);
+  }, [showToast, profile]);
 
   const handleNetworkNodeClick = useCallback((name: string) => {
+    if (profile?.role === 'policymaker') {
+      showToast('Restricted for your role.');
+      return;
+    }
     setEntityDrawer(name);
-  }, []);
+  }, [showToast, profile]);
 
   const handleArrestOpen = useCallback((arrest: typeof RECENT_ARRESTS[0]) => {
+    if (profile?.role === 'policymaker') {
+      showToast('Restricted for your role.');
+      return;
+    }
     setEntityDrawer(arrest.name);
-  }, []);
+  }, [showToast, profile]);
 
   const closeDrawers = useCallback(() => {
     setEvidenceDrawer(null);
@@ -346,6 +394,7 @@ body{font-family:'Courier New',monospace;background:#fff;color:#111;padding:40px
   <div class="meta">
     Karnataka State Police · AI Criminal Intelligence System<br/>
     Generated: <span>${dateStr}</span><br/>
+    Officer: <span>${profile?.full_name ?? 'Unknown'}</span>${profile ? ` · ${profile.role.toUpperCase()} · ${profile.badge_number}` : ''}<br/>
     Session: <span>${SESSION_ID}</span><br/>
     Workspace: <span>${workspaceLabel}</span>${subjectName ? `<br/>Subject: <span>${subjectName}</span>` : ''}
   </div>
@@ -361,8 +410,25 @@ ${rows}
 
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
-  }, [chat, subjectName, workspaceLabel]);
+  }, [chat, subjectName, workspaceLabel, profile]);
 
+  // --------------- loading splash ---------------
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#060A12' }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", color: '#4D9EF5', fontSize: 13, letterSpacing: '0.12em' }}>
+          INITIALISING KIRA…
+        </div>
+      </div>
+    );
+  }
+
+  // --------------- login gate ---------------
+  if (!profile) {
+    return <LoginScreen onLogin={setProfile} />;
+  }
+
+  // --------------- main console ---------------
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
@@ -373,9 +439,11 @@ ${rows}
         workspace={workspace}
         workspaceLabel={workspaceLabel}
         subjectName={subjectName}
+        profile={profile}
         onBack={handleBack}
         onExportReport={handleExportReport}
         onAudit={() => { setWorkspace('audit'); setWorkspaceLabel('Audit Trail'); setSubjectName(undefined); }}
+        onSignOut={handleSignOut}
       />
 
       {/* Main split layout */}
@@ -393,6 +461,7 @@ ${rows}
               onGangMemberClick={handleGangMemberClick}
               onActionToast={showToast}
               onCaseClick={handleCaseClick}
+              role={profile.role}
             />
           )}
 

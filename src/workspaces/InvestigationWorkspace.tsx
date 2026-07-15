@@ -26,6 +26,7 @@ interface InvestigationWorkspaceProps {
   onGangMemberClick: (name: string) => void;
   onActionToast: (msg: string) => void;
   onCaseClick: (caseId: string) => void;
+  role?: string;
 }
 
 const EVIDENCE_ICONS: Record<string, LucideIcon> = {
@@ -49,7 +50,7 @@ const gangStatusColors: Record<string, { bg: string; text: string }> = {
 };
 
 export function InvestigationWorkspace({
-  lang, progress, isVoice, onEvidenceClick, onGangMemberClick, onActionToast, onCaseClick,
+  lang, progress, isVoice, onEvidenceClick, onGangMemberClick, onActionToast, onCaseClick, role,
 }: InvestigationWorkspaceProps) {
   const [activeEvidence, setActiveEvidence] = useState<string | null>(null);
 
@@ -546,24 +547,37 @@ export function InvestigationWorkspace({
           <div style={{ fontSize: 13, color: '#FCD34D', lineHeight: 1.7, marginBottom: 14 }}>
             {t('aiRecommendationText', lang)}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => onActionToast(t('commandSent', lang))} style={{
-              background: 'rgba(245,166,35,0.15)', border: '1px solid rgba(245,166,35,0.4)',
-              color: '#FCD34D', fontWeight: 600, fontSize: 12, borderRadius: 6,
-              padding: '8px 14px', cursor: 'pointer',
-            }}>{t('assignPatrol', lang)}</button>
-            {[
-              { label: t('flagHighRisk', lang), toast: t('flagged', lang) },
-              { label: t('notifyCybercrime', lang), toast: t('notified', lang) },
-              { label: t('generateReport', lang), toast: t('reportGenerated', lang) },
-            ].map(btn => (
-              <button key={btn.label} onClick={() => onActionToast(btn.toast)} style={{
-                background: 'transparent', border: '1px solid rgba(245,166,35,0.2)',
-                color: '#64748B', fontSize: 12, borderRadius: 6,
+          {role === 'analyst' ? (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'rgba(100,116,139,0.12)', border: '1px solid rgba(100,116,139,0.25)',
+              borderRadius: 5, padding: '7px 12px',
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#64748B', flexShrink: 0, display: 'inline-block' }} />
+              <span style={{ fontSize: 11, color: '#94A3B8', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, letterSpacing: '0.07em' }}>
+                FIELD COMMANDS RESTRICTED — Analyst role · Read-only access
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => onActionToast(t('commandSent', lang))} style={{
+                background: 'rgba(245,166,35,0.15)', border: '1px solid rgba(245,166,35,0.4)',
+                color: '#FCD34D', fontWeight: 600, fontSize: 12, borderRadius: 6,
                 padding: '8px 14px', cursor: 'pointer',
-              }}>{btn.label}</button>
-            ))}
-          </div>
+              }}>{t('assignPatrol', lang)}</button>
+              {[
+                { label: t('flagHighRisk', lang), toast: t('flagged', lang) },
+                { label: t('notifyCybercrime', lang), toast: t('notified', lang) },
+                { label: t('generateReport', lang), toast: t('reportGenerated', lang) },
+              ].map(btn => (
+                <button key={btn.label} onClick={() => onActionToast(btn.toast)} style={{
+                  background: 'transparent', border: '1px solid rgba(245,166,35,0.2)',
+                  color: '#64748B', fontSize: 12, borderRadius: 6,
+                  padding: '8px 14px', cursor: 'pointer',
+                }}>{btn.label}</button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

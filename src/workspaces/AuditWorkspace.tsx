@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Lang } from '../i18n/translations';
+import { supabase } from '../lib/supabase';
 
 interface AuditEntry {
   id: string;
@@ -11,6 +12,9 @@ interface AuditEntry {
   confidence: number | null;
   lang: string;
   created_at: string;
+  officer_name: string | null;
+  officer_role: string | null;
+  officer_badge: string | null;
 }
 
 interface AuditWorkspaceProps {
@@ -30,6 +34,13 @@ const WS_COLOR: Record<string, string> = {
   supervision: '#8B9EB5',
 };
 
+const ROLE_COLOR: Record<string, string> = {
+  investigator: '#4D9EF5',
+  analyst: '#8B6FD4',
+  supervisor: '#F5A623',
+  policymaker: '#2ECC71',
+};
+
 function fmt(iso: string) {
   try {
     return new Date(iso).toLocaleString('en-IN', {
@@ -46,9 +57,15 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
   const [filter, setFilter] = useState<'all' | 'officer' | 'ai'>('all');
   const [search, setSearch] = useState('');
 
-  const fetchAudit = useCallback(() => {
+  const fetchAudit = useCallback(async () => {
     setLoading(true);
-    fetch(`${API_BASE}/api/audit?limit=100`)
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    fetch(`${API_BASE}/api/audit?limit=100`, { headers })
       .then(r => r.json())
       .then(d => { setEntries(d.entries || []); setLoading(false); })
       .catch(() => setLoading(false));
@@ -58,7 +75,8 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
 
   const visible = entries.filter(e => {
     if (filter !== 'all' && e.role !== filter) return false;
-    if (search && !e.content.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !e.content.toLowerCase().includes(search.toLowerCase()) &&
+        !(e.officer_name ?? '').toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -121,7 +139,7 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search entries…"
+          placeholder="Search content or officer name…"
           style={{
             flex: 1, background: 'var(--bg-surface, #0D1117)', border: '1px solid var(--border-default, #243447)',
             borderRadius: 6, padding: '7px 12px', color: 'var(--text-primary, #E8EDF2)',
@@ -153,11 +171,11 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
       }} className="left-panel-scroll">
         {/* Table header */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '140px 70px 100px 80px 1fr 70px',
+          display: 'grid', gridTemplateColumns: '130px 150px 70px 100px 1fr 60px',
           padding: '8px 14px', borderBottom: '1px solid var(--border-subtle, #1E2D3D)',
           position: 'sticky', top: 0, background: 'var(--bg-raised, #131920)', zIndex: 2,
         }}>
-          {['TIMESTAMP', 'ROLE', 'WORKSPACE', 'SESSION', 'CONTENT', 'CONF'].map(h => (
+          {['TIMESTAMP', 'OFFICER', 'ROLE', 'WORKSPACE', 'CONTENT', 'CONF'].map(h => (
             <div key={h} style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary, #64748B)', fontWeight: 600, letterSpacing: '0.12em' }}>{h}</div>
           ))}
         </div>
@@ -180,7 +198,7 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
             <div
               key={e.id ?? i}
               style={{
-                display: 'grid', gridTemplateColumns: '140px 70px 100px 80px 1fr 70px',
+                display: 'grid', gridTemplateColumns: '130px 150px 70px 100px 1fr 60px',
                 padding: '9px 14px',
                 borderBottom: '1px solid var(--border-subtle, #1E2D3D)',
                 background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
@@ -190,6 +208,33 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
               <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary, #64748B)', fontVariantNumeric: 'tabular-nums' }}>
                 {fmt(e.created_at)}
               </div>
+
+              {/* Officer identity */}
+              <div>
+                {e.officer_name ? (
+                  <>
+                    <div style={{ fontSize: 12, color: '#E8EDF2', fontWeight: 600 }}>{e.officer_name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                      {e.officer_role && (
+                        <span style={{
+                          fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em',
+                          color: ROLE_COLOR[e.officer_role] ?? '#64748B',
+                        }}>
+                          {e.officer_role.toUpperCase()}
+                        </span>
+                      )}
+                      {e.officer_badge && (
+                        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#4A5C70' }}>
+                          · {e.officer_badge}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#4A5C70' }}>—</span>
+                )}
+              </div>
+
               <div>
                 <span style={{
                   fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em',
@@ -200,17 +245,16 @@ export function AuditWorkspace({ lang }: AuditWorkspaceProps) {
                   {e.role === 'officer' ? 'OFCR' : 'AI'}
                 </span>
               </div>
+
               <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: wsColor, fontWeight: 600, letterSpacing: '0.04em' }}>
                 {e.workspace?.replace('_', ' ').toUpperCase() ?? '—'}
                 {e.entity && <div style={{ color: 'var(--text-tertiary, #64748B)', fontWeight: 400, marginTop: 2 }}>{e.entity}</div>}
               </div>
-              <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted, #8B9EB5)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                {e.lang === 'kn' && <span style={{ fontSize: 9, color: '#F5A623' }}>ಕನ್ನಡ</span>}
-                {e.session_id}
-              </div>
+
               <div style={{ fontSize: 13, color: 'var(--text-secondary, #94A3B8)', lineHeight: 1.5, wordBreak: 'break-word' }}>
                 {e.content.length > 120 ? e.content.slice(0, 120) + '…' : e.content}
               </div>
+
               <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: e.confidence != null ? (e.confidence >= 0.85 ? '#2ECC71' : '#F5A623') : 'var(--text-tertiary, #64748B)' }}>
                 {e.confidence != null ? `${Math.round(e.confidence * 100)}%` : '—'}
               </div>
