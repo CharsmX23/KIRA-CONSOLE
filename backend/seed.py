@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
 sb.table("suspects").insert([
     {

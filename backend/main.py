@@ -322,6 +322,46 @@ async def get_audit_log(
     return {"entries": entries, "total": len(entries)}
 
 
+@app.get("/api/financial/trail/{entity}")
+async def money_trail(entity: str):
+    """Directed graph traversal — downstream money trail up to 4 hops from a named entity."""
+    from agents.financial_analysis import trace_money_trail
+    return trace_money_trail(entity)
+
+
+@app.get("/api/financial/layering/{case_id}")
+async def layering_analysis(case_id: str):
+    """Detect money-laundering layering indicators for a case (multi-hop, structuring, cash-out)."""
+    from agents.financial_analysis import detect_layering_pattern
+    return detect_layering_pattern(case_id)
+
+
+@app.get("/api/suspects/{name}/risk")
+async def suspect_risk_score(name: str):
+    """Computed actuarial risk score with contributing factor breakdown."""
+    from agents.risk_scoring import get_risk_score_for_suspect
+    return get_risk_score_for_suspect(name)
+
+
+@app.get("/api/cases/{case_id}/similar")
+async def similar_cases_endpoint(case_id: str):
+    """Semantic case similarity using sentence embeddings (all-MiniLM-L6-v2, cosine similarity)."""
+    from agents.similar_cases import find_similar_cases
+    return {"similar_cases": find_similar_cases(case_id)}
+
+
+@app.get("/api/network/analysis")
+async def network_analysis_endpoint():
+    """
+    Real graph-based network analysis using networkx + Louvain community detection.
+    Builds the criminal network from live suspect/case/evidence/gang_members data.
+    """
+    from agents.network_analysis import detect_communities, get_centrality_scores
+    communities = detect_communities()
+    centrality = get_centrality_scores()
+    return {"communities": communities, "centrality": centrality}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "KIRA Conversational AI"}

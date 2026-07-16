@@ -1,7 +1,22 @@
+import { useState, useEffect } from 'react';
 import { X, MapPin } from 'lucide-react';
 import { Avatar } from '../Avatar';
 import { Lang, t } from '../../i18n/translations';
 import { RECENT_ARRESTS } from '../../data';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+interface RiskBreakdown {
+  risk_score: number;
+  risk_tier: 'HIGH' | 'MEDIUM' | 'LOW';
+  contributing_factors: {
+    prior_arrests: number;
+    network_size: number;
+    network_centrality: number;
+    evidence_confidence: number;
+    status: number;
+  };
+}
 
 interface EntityDrawerProps {
   name: string;
@@ -46,6 +61,15 @@ const ARREST_MAP = Object.fromEntries(RECENT_ARRESTS.map(a => [a.name, a]));
 const CAT_RING: Record<string, string> = { financial: '#F04E4E', theft: '#F5A623', cyber: '#4D9EF5', drug: '#8B6FD4', robbery: '#F04E4E' };
 
 export function EntityDrawer({ name, lang, onClose, onCaseClick, onActionToast }: EntityDrawerProps) {
+  const [riskBreakdown, setRiskBreakdown] = useState<RiskBreakdown | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/suspects/${encodeURIComponent(name)}/risk`)
+      .then(r => r.json())
+      .then(d => d.risk_score !== undefined ? setRiskBreakdown(d) : null)
+      .catch(() => null);
+  }, [name]);
+
   const data = SUSPECT_DATA[name];
 
   // If it's an arrest record (and not in suspect data), show arrest drawer
@@ -143,6 +167,40 @@ export function EntityDrawer({ name, lang, onClose, onCaseClick, onActionToast }
               fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: sc.text,
             }}>{data.status}</div>
           </div>
+
+          {/* Risk Breakdown */}
+          {riskBreakdown && (() => {
+            const tierColor = riskBreakdown.risk_tier === 'HIGH' ? '#F04E4E' : riskBreakdown.risk_tier === 'MEDIUM' ? '#F5A623' : '#2ECC71';
+            const factors = [
+              { label: 'Network centrality', value: riskBreakdown.contributing_factors.network_centrality },
+              { label: 'Prior arrests', value: riskBreakdown.contributing_factors.prior_arrests },
+              { label: 'Evidence confidence', value: riskBreakdown.contributing_factors.evidence_confidence },
+              { label: 'Network size', value: riskBreakdown.contributing_factors.network_size },
+              { label: 'Status (at large)', value: riskBreakdown.contributing_factors.status },
+            ].sort((a, b) => b.value - a.value);
+            const maxFactor = factors[0].value;
+            return (
+              <div style={{ background: `${tierColor}0A`, border: `1px solid ${tierColor}33`, borderRadius: 6, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.08em' }}>COMPUTED RISK SCORE</div>
+                  <div style={{ fontSize: 18, fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, color: tierColor }}>
+                    {riskBreakdown.risk_score}<span style={{ fontSize: 11, color: '#64748B' }}>/100</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {factors.map(f => (
+                    <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 10, color: '#64748B', width: 120, flexShrink: 0 }}>{f.label}</div>
+                      <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
+                        <div style={{ width: `${maxFactor > 0 ? (f.value / maxFactor) * 100 : 0}%`, height: '100%', background: tierColor, borderRadius: 2, opacity: 0.7 }} />
+                      </div>
+                      <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: tierColor, width: 28, textAlign: 'right' }}>{f.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Quick stats */}
           <div style={{ display: 'flex', gap: 8 }}>

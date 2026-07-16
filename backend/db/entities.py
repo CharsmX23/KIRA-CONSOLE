@@ -79,6 +79,16 @@ def get_user_profile(user_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
+def get_victims_for_case(case_id: str) -> list:
+    result = supabase.table("victims").select("*").eq("case_id", case_id).execute()
+    return result.data or []
+
+
+def get_victim(name: str) -> dict | None:
+    result = supabase.table("victims").select("*").ilike("name", f"%{name}%").limit(1).execute()
+    return result.data[0] if result.data else None
+
+
 def get_entity_data(workspace: str, entity: str | None) -> dict | None:
     """Fetch relevant entity data based on workspace type, passed to the responder for context."""
     if not entity:
@@ -88,14 +98,21 @@ def get_entity_data(workspace: str, entity: str | None) -> dict | None:
         suspect = get_suspect(entity)
         if not suspect:
             return None
+        from agents.risk_scoring import get_risk_score_for_suspect
         return {
             "suspect": suspect,
             "cases": get_suspect_cases(entity),
             "evidence": get_suspect_evidence(entity),
+            "computed_risk": get_risk_score_for_suspect(entity),
         }
 
     if workspace == "case":
-        return {"case": get_case(entity)}
+        from agents.financial_analysis import detect_layering_pattern
+        return {
+            "case": get_case(entity),
+            "victims": get_victims_for_case(entity),
+            "financial_analysis": detect_layering_pattern(entity),
+        }
 
     if workspace == "network":
         return {"gang_members": get_gang_members("Cluster K-7")}
