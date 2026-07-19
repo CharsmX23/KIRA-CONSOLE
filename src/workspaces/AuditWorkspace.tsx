@@ -21,7 +21,7 @@ interface AuditWorkspaceProps {
   lang: Lang;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://kiraconsole.development.catalystappsail.in';
 
 const WS_COLOR: Record<string, string> = {
   suspect: '#F04E4E',

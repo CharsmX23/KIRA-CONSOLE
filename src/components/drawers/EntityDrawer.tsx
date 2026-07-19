@@ -4,7 +4,7 @@ import { Avatar } from '../Avatar';
 import { Lang, t } from '../../i18n/translations';
 import { RECENT_ARRESTS } from '../../data';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://kiraconsole.development.catalystappsail.in';
 
 interface RiskBreakdown {
   risk_score: number;

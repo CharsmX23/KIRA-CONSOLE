@@ -176,7 +176,7 @@ interface LiveAlert {
   time: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://kiraconsole.development.catalystappsail.in';
 
 export function SupervisionWorkspace({ lang, mapAction }: SupervisionWorkspaceProps) {
   const [hiddenSeries, setHiddenSeries] = useState<string[]>([]);

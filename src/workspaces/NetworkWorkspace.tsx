@@ -24,7 +24,7 @@ interface AnalysisData {
   centrality: Record<string, number>;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://kiraconsole.development.catalystappsail.in';
 
 const NODES = [
   { id: 'dn', x: 250, y: 100, r: 36, color: '#F04E4E', label: 'D. Nair', sublabel: 'Kingpin', name: 'D. Nair' },
