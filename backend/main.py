@@ -24,7 +24,7 @@ if _missing:
 print("[KIRA STARTUP] All required env vars present — starting imports", flush=True)
 
 # --------------- standard imports ---------------
-from fastapi import FastAPI, Header, HTTPException, Depends
+from fastapi import FastAPI, Header, HTTPException, Depends, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 import jwt as pyjwt
@@ -33,6 +33,7 @@ from jwt import PyJWKClient
 from agents.router import classify_intent
 from agents.responder import generate_response, AGENT_SETS
 from agents.translator import detect_language
+from agents.rag import extract_pdf_text, chunk_text, index_document, retrieve_context
 from memory.supabase_memory import (
     get_or_create_session,
     update_session,
@@ -49,6 +50,12 @@ from db.entities import (
     get_suspect_cases,
     get_suspect_evidence,
     get_user_profile,
+)
+from db.documents import (
+    create_document,
+    list_documents,
+    update_chunk_count,
+    delete_document as delete_document_record,
 )
 from schemas.models import ChatRequest
 
@@ -240,6 +247,12 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
         entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity)
         history = await asyncio.to_thread(get_history, session_id, 8)
 
+        rag_context: list[str] = []
+        try:
+            rag_context = await asyncio.to_thread(retrieve_context, req.query)
+        except Exception as rag_err:
+            print(f"[RAG] Retrieval skipped: {rag_err}")
+
         narration = await asyncio.to_thread(
             generate_response,
             req.query,
@@ -248,6 +261,7 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
             entity_data,
             history,
             lang,
+            rag_context,
         )
 
         # Event 2: AI narration text + optional map action
@@ -401,6 +415,44 @@ def network_analysis_endpoint():
     communities = detect_communities()
     centrality = get_centrality_scores()
     return {"communities": communities, "centrality": centrality}
+
+
+@app.post("/api/documents")
+async def upload_document(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+
+    text = await asyncio.to_thread(extract_pdf_text, content)
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Could not extract text from PDF")
+
+    chunks = chunk_text(text)
+    document = await asyncio.to_thread(create_document, file.filename, current_user["user_id"])
+    await asyncio.to_thread(index_document, document["id"], file.filename, chunks)
+    await asyncio.to_thread(update_chunk_count, document["id"], len(chunks))
+
+    print(f"[RAG] Indexed {len(chunks)} chunks for '{file.filename}' (doc {document['id']})")
+    return {"id": document["id"], "name": file.filename, "chunk_count": len(chunks)}
+
+
+@app.get("/api/documents")
+async def list_documents_endpoint():
+    return {"documents": list_documents()}
+
+
+@app.delete("/api/documents/{document_id}")
+async def delete_document_endpoint(
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    await asyncio.to_thread(delete_document_record, document_id)
+    return {"deleted": document_id}
 
 
 @app.get("/health")

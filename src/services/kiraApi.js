@@ -2,6 +2,44 @@ import { supabase } from '../lib/supabase';
 
 const BASE = import.meta.env.VITE_API_URL || 'https://kiraconsole.development.catalystappsail.in';
 
+async function _authHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
+  return { Authorization: `Bearer ${session.access_token}` };
+}
+
+export async function uploadDocument(file) {
+  const headers = await _authHeaders();
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${BASE}/api/documents`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Upload failed (${response.status}): ${text}`);
+  }
+  return response.json();
+}
+
+export async function listDocuments() {
+  const response = await fetch(`${BASE}/api/documents`);
+  if (!response.ok) throw new Error('Failed to list documents');
+  return response.json();
+}
+
+export async function deleteDocument(documentId) {
+  const headers = await _authHeaders();
+  const response = await fetch(`${BASE}/api/documents/${documentId}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!response.ok) throw new Error('Delete failed');
+  return response.json();
+}
+
 /**
  * Send a query to KIRA conversational AI.
  *

@@ -1,6 +1,7 @@
-import { useRef, useEffect, useCallback } from 'react';
-import { Mic, MicOff, Shield, Volume2, VolumeX } from 'lucide-react';
+import { useRef, useEffect, useCallback, useState } from 'react';
+import { Mic, MicOff, Shield, Volume2, VolumeX, Paperclip, X } from 'lucide-react';
 import { Lang, t } from '../i18n/translations';
+import { uploadDocument, listDocuments, deleteDocument } from '../services/kiraApi';
 
 function scaledFontSize(baseSize: number, lang: string): number {
   return lang === 'kn' ? baseSize + 3 : baseSize;
@@ -37,6 +38,12 @@ interface RightPanelProps {
   onToggleMute: () => void;
 }
 
+interface Document {
+  id: string;
+  name: string;
+  chunk_count: number;
+}
+
 export function RightPanel({
   lang, setLang, chat, input, setInput, onAnalyze, onVoice,
   voiceState, listening, interimTranscript, browserSupportsSpeechRecognition,
@@ -44,6 +51,38 @@ export function RightPanel({
 }: RightPanelProps) {
   const chatRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading'>('idle');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listDocuments()
+      .then(r => setDocuments(r.documents || []))
+      .catch(() => {});
+  }, []);
+
+  const handleUpload = async (file: File) => {
+    setUploadState('uploading');
+    setUploadError(null);
+    try {
+      const doc = await uploadDocument(file);
+      setDocuments(prev => [{ id: doc.id, name: doc.name, chunk_count: doc.chunk_count }, ...prev]);
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadState('idle');
+    }
+  };
+
+  const handleDeleteDoc = async (id: string) => {
+    try {
+      await deleteDocument(id);
+      setDocuments(prev => prev.filter(d => d.id !== id));
+    } catch {
+      // silent — doc list will be inconsistent until refresh, acceptable
+    }
+  };
 
   useEffect(() => {
     if (chatRef.current) {
@@ -323,6 +362,86 @@ export function RightPanel({
               ))}
             </div>
           </>
+        )}
+      </div>
+
+      {/* Document RAG strip */}
+      <div style={{
+        padding: '6px 12px 8px',
+        borderTop: '1px solid var(--border-subtle, #1E2D3D)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: documents.length > 0 ? 5 : 0 }}>
+          <span style={{ fontSize: 9, color: 'var(--text-tertiary, #64748B)', fontWeight: 600, letterSpacing: '0.12em', fontFamily: 'var(--font-mono)' }}>
+            DOCS · RAG
+          </span>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadState === 'uploading'}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-subtle, #1E2D3D)',
+              borderRadius: 4,
+              padding: '2px 8px',
+              cursor: uploadState === 'uploading' ? 'wait' : 'pointer',
+              fontSize: 10,
+              color: 'var(--text-tertiary, #64748B)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              opacity: uploadState === 'uploading' ? 0.6 : 1,
+            }}
+          >
+            <Paperclip size={10} />
+            {uploadState === 'uploading' ? 'Indexing…' : 'Upload PDF'}
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) handleUpload(file);
+            e.target.value = '';
+          }}
+        />
+        {uploadError && (
+          <div style={{ fontSize: 10, color: '#F04E4E', marginTop: 3 }}>{uploadError}</div>
+        )}
+        {documents.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+            {documents.map(doc => (
+              <div key={doc.id} style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                background: 'var(--bg-raised, #131920)',
+                border: '1px solid var(--border-subtle, #1E2D3D)',
+                borderRadius: 9999,
+                padding: '3px 6px 3px 8px',
+                fontSize: 10,
+                color: 'var(--text-secondary, #94A3B8)',
+                maxWidth: 160,
+              }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
+                  {doc.name.replace(/\.pdf$/i, '')}
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--text-tertiary, #64748B)', flexShrink: 0 }}>
+                  {doc.chunk_count}c
+                </span>
+                <button
+                  onClick={() => handleDeleteDoc(doc.id)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: '0 0 0 2px', color: 'var(--text-tertiary, #64748B)',
+                    display: 'flex', alignItems: 'center', flexShrink: 0,
+                  }}
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

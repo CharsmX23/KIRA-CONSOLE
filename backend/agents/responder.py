@@ -65,6 +65,7 @@ def generate_response(
     entity_data: dict | None,
     conversation_history: list[dict],
     lang: str,
+    rag_context: list[str] | None = None,
 ) -> str:
     """
     Generate AI narration using Cerebras gpt-oss-120b.
@@ -117,7 +118,16 @@ def generate_response(
     if lang == "kn":
         lang_instruction = "\n\nIMPORTANT: Respond in formal Kannada (ಕನ್ನಡ) only."
 
-    system_content = RESPONDER_SYSTEM + entity_context + grounding + financial_grounding + lang_instruction
+    rag_section = ""
+    if rag_context:
+        rag_snippet = "\n\n---\n".join(rag_context)
+        rag_section = (
+            f"\n\n[RETRIEVED DOCUMENT CONTEXT — FROM UPLOADED POLICE REPORTS]\n"
+            f"{rag_snippet}\n[END RETRIEVED CONTEXT]\n"
+            f"Reference this context when relevant to the query."
+        )
+
+    system_content = RESPONDER_SYSTEM + entity_context + grounding + financial_grounding + rag_section + lang_instruction
 
     messages = [{"role": "system", "content": system_content}]
 
