@@ -33,7 +33,6 @@ from jwt import PyJWKClient
 from agents.router import classify_intent
 from agents.responder import generate_response, AGENT_SETS
 from agents.translator import detect_language
-from agents.rag import extract_pdf_text, chunk_text, index_document, retrieve_context
 from memory.supabase_memory import (
     get_or_create_session,
     update_session,
@@ -249,6 +248,7 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
 
         rag_context: list[str] = []
         try:
+            from agents.rag import retrieve_context
             rag_context = await asyncio.to_thread(retrieve_context, req.query)
         except Exception as rag_err:
             print(f"[RAG] Retrieval skipped: {rag_err}")
@@ -428,6 +428,7 @@ async def upload_document(
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
 
+    from agents.rag import extract_pdf_text, chunk_text, index_document
     text = await asyncio.to_thread(extract_pdf_text, content)
     if not text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from PDF")
