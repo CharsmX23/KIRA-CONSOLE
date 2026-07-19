@@ -1,6 +1,29 @@
+import sys
 import uuid
 import json
 import os
+import asyncio
+
+# --------------- env var validation (runs before ANY other import) ---------------
+# load_dotenv first so local .env works; in Catalyst the OS env is already populated.
+from dotenv import load_dotenv
+load_dotenv()
+
+_REQUIRED_ENV = {
+    "SUPABASE_URL":         "Supabase project URL (Settings → API → Project URL)",
+    "SUPABASE_SERVICE_KEY": "Supabase service_role key (Settings → API → service_role)",
+    "CEREBRAS_API_KEY":     "Cerebras cloud API key",
+}
+_missing = [k for k in _REQUIRED_ENV if not os.environ.get(k)]
+if _missing:
+    for k in _missing:
+        print(f"[KIRA STARTUP ERROR] Missing env var: {k}  — {_REQUIRED_ENV[k]}", flush=True)
+    print(f"[KIRA STARTUP ERROR] {len(_missing)} required env var(s) not set. Cannot start.", flush=True)
+    sys.exit(1)
+
+print("[KIRA STARTUP] All required env vars present — starting imports", flush=True)
+
+# --------------- standard imports ---------------
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -28,10 +51,6 @@ from db.entities import (
     get_user_profile,
 )
 from schemas.models import ChatRequest
-
-from dotenv import load_dotenv
-
-load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 # PyJWKClient fetches Supabase's public JWKS, caches keys, and auto-selects
@@ -93,7 +112,7 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
         print(f"[KIRA backend] get_current_user: token decode failed — {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
-    profile = get_user_profile(user_id)
+    profile = await asyncio.to_thread(get_user_profile, user_id)
     if not profile:
         print(f"[KIRA backend] get_current_user: no profile found for user_id={user_id}")
         raise HTTPException(status_code=403, detail="No officer profile found for this account")
@@ -140,7 +159,11 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
     officer_role = current_user["role"]
 
     async def generate():
-        session = await get_or_create_session(session_id, req.lang)
+        # Yield immediately so CORS + SSE headers are flushed before any blocking I/O.
+        # AppSail's proxy drops silent connections; this heartbeat keeps it alive.
+        yield f"data: {json.dumps({'event': 'heartbeat'})}\n\n"
+
+        session = await asyncio.to_thread(get_or_create_session, session_id, req.lang)
         current_workspace = session.get("current_workspace", "supervision")
         current_entity = session.get("current_entity")
 
@@ -150,14 +173,15 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
             if detected == "kn":
                 lang = "kn"
 
-        context_string = await get_recent_context_string(session_id)
-        await save_message(session_id, "officer", req.query, user_id=user_id)
+        context_string = await asyncio.to_thread(get_recent_context_string, session_id)
+        await asyncio.to_thread(save_message, session_id, "officer", req.query, user_id)
 
-        routing = await classify_intent(
-            query=req.query,
-            current_workspace=current_workspace,
-            current_entity=current_entity,
-            recent_context=context_string,
+        routing = await asyncio.to_thread(
+            classify_intent,
+            req.query,
+            current_workspace,
+            current_entity,
+            context_string,
         )
 
         target_workspace = routing.get("workspace", current_workspace)
@@ -183,7 +207,7 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
             }
             yield f"data: {json.dumps(signal_event)}\n\n"
             yield f"data: {json.dumps({'event': 'narration', 'text': _POLICYMAKER_SUSPECT_BLOCK, 'lang': lang})}\n\n"
-            await save_message(session_id, "ai", _POLICYMAKER_SUSPECT_BLOCK, user_id=user_id)
+            await asyncio.to_thread(save_message, session_id, "ai", _POLICYMAKER_SUSPECT_BLOCK, user_id)
             yield f"data: {json.dumps({'event': 'done', 'session_id': session_id})}\n\n"
             return
 
@@ -199,16 +223,17 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
         }
         yield f"data: {json.dumps(signal_event)}\n\n"
 
-        entity_data = get_entity_data(target_workspace, entity)
-        history = await get_history(session_id, limit=8)
+        entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity)
+        history = await asyncio.to_thread(get_history, session_id, 8)
 
-        narration = await generate_response(
-            query=req.query,
-            workspace=target_workspace,
-            entity=entity,
-            entity_data=entity_data,
-            conversation_history=history,
-            lang=lang,
+        narration = await asyncio.to_thread(
+            generate_response,
+            req.query,
+            target_workspace,
+            entity,
+            entity_data,
+            history,
+            lang,
         )
 
         # Event 2: AI narration text + optional map action
@@ -218,7 +243,7 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
             narration_event["map_action"] = map_action
         yield f"data: {json.dumps(narration_event)}\n\n"
 
-        await update_session(session_id, target_workspace, entity)
+        await asyncio.to_thread(update_session, session_id, target_workspace, entity)
 
         workspace_signal_record = {
             "workspace": target_workspace,
@@ -226,7 +251,9 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
             "entity": entity,
             "confidence": confidence,
         }
-        await save_message(session_id, "ai", narration, user_id=user_id, workspace_signal=workspace_signal_record)
+        await asyncio.to_thread(
+            save_message, session_id, "ai", narration, user_id, workspace_signal_record
+        )
 
         yield f"data: {json.dumps({'event': 'done', 'session_id': session_id})}\n\n"
 
@@ -242,14 +269,14 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
 
 
 @app.get("/api/session/{session_id}")
-async def get_session(session_id: str):
-    session = await get_or_create_session(session_id)
-    history = await get_history(session_id, limit=20)
+def get_session(session_id: str):
+    session = get_or_create_session(session_id)
+    history = get_history(session_id, limit=20)
     return {"session": session, "history": history}
 
 
 @app.get("/api/suspects/{name}")
-async def get_suspect_detail(name: str):
+def get_suspect_detail(name: str):
     return {
         "suspect": get_suspect(name),
         "cases": get_suspect_cases(name),
@@ -258,17 +285,17 @@ async def get_suspect_detail(name: str):
 
 
 @app.get("/api/hotspots")
-async def get_hotspots_endpoint():
+def get_hotspots_endpoint():
     return get_hotspots()
 
 
 @app.get("/api/arrests")
-async def get_arrests():
+def get_arrests():
     return get_recent_arrests()
 
 
 @app.get("/api/alerts")
-async def get_alerts():
+def get_alerts():
     """Rule-based proactive alert generation from live Supabase data."""
     from datetime import datetime
     hotspots = get_hotspots()
@@ -307,14 +334,14 @@ async def get_alerts():
 
 
 @app.get("/api/audit")
-async def get_audit_log(
+def get_audit_log(
     limit: int = 100,
     current_user: dict = Depends(get_current_user),
 ):
     """
     Audit trail. Supervisors see all officers' history; others see only their own.
     """
-    entries = await get_audit_entries(
+    entries = get_audit_entries(
         limit=limit,
         requesting_user_id=current_user["user_id"],
         requesting_role=current_user["role"],
@@ -323,35 +350,35 @@ async def get_audit_log(
 
 
 @app.get("/api/financial/trail/{entity}")
-async def money_trail(entity: str):
+def money_trail(entity: str):
     """Directed graph traversal — downstream money trail up to 4 hops from a named entity."""
     from agents.financial_analysis import trace_money_trail
     return trace_money_trail(entity)
 
 
 @app.get("/api/financial/layering/{case_id}")
-async def layering_analysis(case_id: str):
+def layering_analysis(case_id: str):
     """Detect money-laundering layering indicators for a case (multi-hop, structuring, cash-out)."""
     from agents.financial_analysis import detect_layering_pattern
     return detect_layering_pattern(case_id)
 
 
 @app.get("/api/suspects/{name}/risk")
-async def suspect_risk_score(name: str):
+def suspect_risk_score(name: str):
     """Computed actuarial risk score with contributing factor breakdown."""
     from agents.risk_scoring import get_risk_score_for_suspect
     return get_risk_score_for_suspect(name)
 
 
 @app.get("/api/cases/{case_id}/similar")
-async def similar_cases_endpoint(case_id: str):
+def similar_cases_endpoint(case_id: str):
     """Semantic case similarity using sentence embeddings (all-MiniLM-L6-v2, cosine similarity)."""
     from agents.similar_cases import find_similar_cases
     return {"similar_cases": find_similar_cases(case_id)}
 
 
 @app.get("/api/network/analysis")
-async def network_analysis_endpoint():
+def network_analysis_endpoint():
     """
     Real graph-based network analysis using networkx + Louvain community detection.
     Builds the criminal network from live suspect/case/evidence/gang_members data.
@@ -363,7 +390,7 @@ async def network_analysis_endpoint():
 
 
 @app.get("/health")
-async def health():
+def health():
     return {"status": "ok", "service": "KIRA Conversational AI"}
 
 

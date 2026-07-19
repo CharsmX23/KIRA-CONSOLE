@@ -5,7 +5,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Cerebras(api_key=os.environ["CEREBRAS_API_KEY"])
+_client = None
+
+def _get_client() -> Cerebras:
+    global _client
+    if _client is None:
+        key = os.environ.get("CEREBRAS_API_KEY")
+        if not key:
+            raise RuntimeError("[KIRA] CEREBRAS_API_KEY is not set — router cannot start")
+        _client = Cerebras(api_key=key)
+    return _client
 
 ROUTER_SYSTEM = """
 You are a police query classifier for KIRA Console, a Karnataka Police
@@ -46,7 +55,7 @@ RULES:
 """
 
 
-async def classify_intent(
+def classify_intent(
     query: str,
     current_workspace: str,
     current_entity: str | None,
@@ -65,7 +74,7 @@ Officer query: {query}
 Classify this query.
 """
     try:
-        response = client.chat.completions.create(
+        response = _get_client().chat.completions.create(
             model="gpt-oss-120b",
             messages=[
                 {"role": "system", "content": ROUTER_SYSTEM},

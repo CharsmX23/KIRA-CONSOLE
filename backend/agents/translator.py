@@ -4,7 +4,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Cerebras(api_key=os.environ["CEREBRAS_API_KEY"])
+_client = None
+
+def _get_client() -> Cerebras:
+    global _client
+    if _client is None:
+        key = os.environ.get("CEREBRAS_API_KEY")
+        if not key:
+            raise RuntimeError("[KIRA] CEREBRAS_API_KEY is not set — translator cannot start")
+        _client = Cerebras(api_key=key)
+    return _client
 
 TRANSLATE_SYSTEM = """
 Translate the following English text to formal Karnataka police-context
@@ -16,7 +25,7 @@ Return ONLY the translated text, nothing else.
 async def to_kannada(text: str) -> str:
     """Translate English AI response to Kannada using Cerebras gpt-oss-120b."""
     try:
-        response = client.chat.completions.create(
+        response = _get_client().chat.completions.create(
             model="gpt-oss-120b",
             messages=[
                 {"role": "system", "content": TRANSLATE_SYSTEM},

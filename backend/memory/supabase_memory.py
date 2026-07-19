@@ -4,15 +4,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-supabase: Client = create_client(
-    os.environ["SUPABASE_URL"],
-    os.environ["SUPABASE_SERVICE_KEY"],
-)
+_supabase: Client | None = None
+
+def _get_supabase() -> Client:
+    global _supabase
+    if _supabase is None:
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_KEY")
+        if not url or not key:
+            missing = [k for k, v in {"SUPABASE_URL": url, "SUPABASE_SERVICE_KEY": key}.items() if not v]
+            raise RuntimeError(f"[KIRA] Missing env vars: {missing}")
+        _supabase = create_client(url, key)
+    return _supabase
 
 
-async def get_or_create_session(session_id: str, lang: str = "en") -> dict:
+def get_or_create_session(session_id: str, lang: str = "en") -> dict:
     """Get existing session or create a new one."""
-    result = supabase.table("sessions").select("*").eq("id", session_id).execute()
+    result = _get_supabase().table("sessions").select("*").eq("id", session_id).execute()
 
     if result.data:
         return result.data[0]
@@ -23,20 +31,20 @@ async def get_or_create_session(session_id: str, lang: str = "en") -> dict:
         "current_workspace": "supervision",
         "current_entity": None,
     }
-    supabase.table("sessions").insert(new_session).execute()
+    _get_supabase().table("sessions").insert(new_session).execute()
     return new_session
 
 
-async def update_session(session_id: str, workspace: str, entity: str | None):
+def update_session(session_id: str, workspace: str, entity: str | None):
     """Update session with current workspace and entity."""
-    supabase.table("sessions").update({
+    _get_supabase().table("sessions").update({
         "current_workspace": workspace,
         "current_entity": entity,
         "updated_at": "NOW()",
     }).eq("id", session_id).execute()
 
 
-async def save_message(
+def save_message(
     session_id: str,
     role: str,
     content: str,
@@ -52,16 +60,16 @@ async def save_message(
     }
     if user_id:
         row["user_id"] = user_id
-    supabase.table("messages").insert(row).execute()
+    _get_supabase().table("messages").insert(row).execute()
 
 
-async def get_history(session_id: str, limit: int = 8) -> list[dict]:
+def get_history(session_id: str, limit: int = 8) -> list[dict]:
     """
     Get last N messages for context window.
     Returns list of {"role": "officer"|"ai", "content": "..."}
     """
     result = (
-        supabase.table("messages")
+        _get_supabase().table("messages")
         .select("role, content")
         .eq("session_id", session_id)
         .order("created_at", desc=True)
@@ -72,7 +80,7 @@ async def get_history(session_id: str, limit: int = 8) -> list[dict]:
     return messages
 
 
-async def get_audit_entries(
+def get_audit_entries(
     limit: int = 50,
     requesting_user_id: str | None = None,
     requesting_role: str | None = None,
@@ -82,7 +90,7 @@ async def get_audit_entries(
     Supervisors see all entries; other roles see only their own (filtered by user_id).
     """
     query = (
-        supabase.table("messages")
+        _get_supabase().table("messages")
         .select("id, session_id, role, content, workspace_signal, user_id, created_at")
         .order("created_at", desc=True)
         .limit(limit)
@@ -100,7 +108,7 @@ async def get_audit_entries(
     profile_map: dict[str, dict] = {}
     if user_ids:
         profiles_result = (
-            supabase.table("profiles")
+            _get_supabase().table("profiles")
             .select("id, full_name, role, badge_number")
             .in_("id", user_ids)
             .execute()
@@ -112,7 +120,7 @@ async def get_audit_entries(
     session_map: dict[str, dict] = {}
     if session_ids:
         sessions_result = (
-            supabase.table("sessions")
+            _get_supabase().table("sessions")
             .select("id, lang, current_workspace, current_entity")
             .in_("id", session_ids)
             .execute()
@@ -141,12 +149,12 @@ async def get_audit_entries(
     return enriched
 
 
-async def get_recent_context_string(session_id: str) -> str:
+def get_recent_context_string(session_id: str) -> str:
     """
     Get last 3 exchanges as a plain string for the router.
     Example: "Officer: Tell me about R. Mehta | AI: R. Mehta is HIGH RISK..."
     """
-    messages = await get_history(session_id, limit=6)
+    messages = get_history(session_id, limit=6)
     parts = []
     for msg in messages:
         label = "Officer" if msg["role"] == "officer" else "AI"

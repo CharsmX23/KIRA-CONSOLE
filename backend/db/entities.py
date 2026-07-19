@@ -4,35 +4,39 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_service_key = os.environ.get("SUPABASE_SERVICE_KEY")
-if not _service_key or _service_key == "PASTE_SERVICE_ROLE_KEY_HERE":
-    raise RuntimeError(
-        "SUPABASE_SERVICE_KEY is not set in backend/.env. "
-        "Get it from: Supabase Dashboard → Project Settings → API → service_role key"
-    )
+_supabase: Client | None = None
 
-supabase: Client = create_client(os.environ["SUPABASE_URL"], _service_key)
+def _get_supabase() -> Client:
+    global _supabase
+    if _supabase is None:
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_KEY")
+        if not url or not key:
+            missing = [k for k, v in {"SUPABASE_URL": url, "SUPABASE_SERVICE_KEY": key}.items() if not v]
+            raise RuntimeError(f"[KIRA] Missing env vars: {missing}")
+        _supabase = create_client(url, key)
+    return _supabase
 
 
 def get_suspect(name: str) -> dict | None:
-    result = supabase.table("suspects").select("*").ilike("name", f"%{name}%").limit(1).execute()
+    result = _get_supabase().table("suspects").select("*").ilike("name", f"%{name}%").limit(1).execute()
     return result.data[0] if result.data else None
 
 
 def get_suspect_cases(name: str) -> list:
     junctions = (
-        supabase.table("suspect_cases").select("case_id").eq("suspect_name", name).execute()
+        _get_supabase().table("suspect_cases").select("case_id").eq("suspect_name", name).execute()
     )
     if not junctions.data:
         return []
     case_ids = [j["case_id"] for j in junctions.data]
-    result = supabase.table("cases").select("*").in_("case_id", case_ids).execute()
+    result = _get_supabase().table("cases").select("*").in_("case_id", case_ids).execute()
     return result.data or []
 
 
 def get_suspect_evidence(name: str) -> list:
     junctions = (
-        supabase.table("evidence_suspects")
+        _get_supabase().table("evidence_suspects")
         .select("evidence_title")
         .eq("suspect_name", name)
         .execute()
@@ -40,30 +44,30 @@ def get_suspect_evidence(name: str) -> list:
     if not junctions.data:
         return []
     titles = [j["evidence_title"] for j in junctions.data]
-    result = supabase.table("evidence").select("*").in_("title", titles).execute()
+    result = _get_supabase().table("evidence").select("*").in_("title", titles).execute()
     return result.data or []
 
 
 def get_case(case_id: str) -> dict | None:
     result = (
-        supabase.table("cases").select("*").eq("case_id", case_id).limit(1).execute()
+        _get_supabase().table("cases").select("*").eq("case_id", case_id).limit(1).execute()
     )
     return result.data[0] if result.data else None
 
 
 def get_gang_members(cluster: str) -> list:
-    result = supabase.table("gang_members").select("*").eq("cluster", cluster).execute()
+    result = _get_supabase().table("gang_members").select("*").eq("cluster", cluster).execute()
     return result.data or []
 
 
 def get_hotspots() -> list:
-    result = supabase.table("hotspots").select("*").execute()
+    result = _get_supabase().table("hotspots").select("*").execute()
     return result.data or []
 
 
 def get_recent_arrests(limit: int = 6) -> list:
     result = (
-        supabase.table("arrests")
+        _get_supabase().table("arrests")
         .select("*")
         .order("arrest_date", desc=True)
         .limit(limit)
@@ -74,18 +78,18 @@ def get_recent_arrests(limit: int = 6) -> list:
 
 def get_user_profile(user_id: str) -> dict | None:
     print(f"[KIRA entities] get_user_profile: querying profiles for user_id={user_id!r} (type={type(user_id).__name__})")
-    result = supabase.table("profiles").select("id, full_name, role, badge_number").eq("id", user_id).limit(1).execute()
+    result = _get_supabase().table("profiles").select("id, full_name, role, badge_number").eq("id", user_id).limit(1).execute()
     print(f"[KIRA entities] get_user_profile: raw result.data={result.data!r}")
     return result.data[0] if result.data else None
 
 
 def get_victims_for_case(case_id: str) -> list:
-    result = supabase.table("victims").select("*").eq("case_id", case_id).execute()
+    result = _get_supabase().table("victims").select("*").eq("case_id", case_id).execute()
     return result.data or []
 
 
 def get_victim(name: str) -> dict | None:
-    result = supabase.table("victims").select("*").ilike("name", f"%{name}%").limit(1).execute()
+    result = _get_supabase().table("victims").select("*").ilike("name", f"%{name}%").limit(1).execute()
     return result.data[0] if result.data else None
 
 

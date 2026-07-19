@@ -1,0 +1,8 @@
+node_modules/
+backend/
+*.zip
+.git/
+.venv/
+*.log
+catalyst-debug.log
+kira-backend*.zip

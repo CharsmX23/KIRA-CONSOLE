@@ -4,7 +4,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Cerebras(api_key=os.environ["CEREBRAS_API_KEY"])
+_client = None
+
+def _get_client() -> Cerebras:
+    global _client
+    if _client is None:
+        key = os.environ.get("CEREBRAS_API_KEY")
+        if not key:
+            raise RuntimeError("[KIRA] CEREBRAS_API_KEY is not set — responder cannot start")
+        _client = Cerebras(api_key=key)
+    return _client
 
 AGENT_SETS = {
     "supervision":  ["Hotspot Agent", "Trend Agent", "Alert Agent"],
@@ -49,7 +58,7 @@ WHAT YOU KNOW:
 """
 
 
-async def generate_response(
+def generate_response(
     query: str,
     workspace: str,
     entity: str | None,
@@ -122,7 +131,7 @@ async def generate_response(
     })
 
     try:
-        response = client.chat.completions.create(
+        response = _get_client().chat.completions.create(
             model="gpt-oss-120b",
             messages=messages,
             max_tokens=300,
