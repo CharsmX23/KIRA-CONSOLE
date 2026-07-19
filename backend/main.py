@@ -26,7 +26,7 @@ print("[KIRA STARTUP] All required env vars present — starting imports", flush
 # --------------- standard imports ---------------
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 import jwt as pyjwt
 from jwt import PyJWKClient
 
@@ -143,6 +143,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400",
+}
+
+# ZGS (Zoho Gateway Server) strips Access-Control-Request-Method from OPTIONS
+# before forwarding to FastAPI, so CORSMiddleware never fires its preflight logic.
+# Explicit OPTIONS handlers return CORS headers unconditionally.
+@app.options("/api/{path:path}")
+def options_handler():
+    return Response(status_code=200, headers=_CORS_HEADERS)
 
 
 @app.post("/api/chat")
