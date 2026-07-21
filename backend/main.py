@@ -456,6 +456,18 @@ async def delete_document_endpoint(
     return {"deleted": document_id}
 
 
+@app.get("/api/catalyst-test")
+async def catalyst_test():
+    from db.catalyst_client import get_catalyst_zcql
+
+    def _query():
+        zcql = get_catalyst_zcql()
+        return zcql.execute_query("SELECT * FROM State")
+
+    results = await asyncio.to_thread(_query)
+    return {"results": results}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "KIRA Conversational AI"}
