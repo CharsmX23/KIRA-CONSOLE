@@ -462,7 +462,7 @@ async def catalyst_test():
 
     def _query():
         zcql = get_catalyst_zcql()
-        return zcql.execute_query("SELECT * FROM State")
+        return zcql.execute_query("SELECT * FROM state")
 
     results = await asyncio.to_thread(_query)
     return {"results": results}
