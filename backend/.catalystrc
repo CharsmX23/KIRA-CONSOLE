@@ -1,0 +1,48 @@
+{
+  "defaults": {
+    "project": 2,
+    "env": 1
+  },
+  "actives": {
+    "project": 2,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "42868000000021001",
+      "name": "KSPH26",
+      "domain": {
+        "id": "50042842660",
+        "name": "ksph26-60072897768.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60072897768",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    },
+    {
+      "idx": 2,
+      "id": "42868000000040016",
+      "name": "Ksph2026",
+      "domain": {
+        "id": "50044129731",
+        "name": "ksph2026-60072897768.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60072897768",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}
