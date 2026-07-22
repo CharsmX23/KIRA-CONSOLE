@@ -1,0 +1,7 @@
+packages/
+__pycache__/
+*.pyc
+*.pyo
+.env
+backend/
+catalyst-debug.log
