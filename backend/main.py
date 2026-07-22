@@ -24,7 +24,7 @@ if _missing:
 print("[KIRA STARTUP] All required env vars present — starting imports", flush=True)
 
 # --------------- standard imports ---------------
-from fastapi import FastAPI, Header, HTTPException, Depends, File, UploadFile
+from fastapi import FastAPI, Header, HTTPException, Depends, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 import jwt as pyjwt
@@ -457,15 +457,14 @@ async def delete_document_endpoint(
 
 
 @app.get("/api/catalyst-test")
-async def catalyst_test():
-    from db.catalyst_client import get_catalyst_zcql
+async def catalyst_test(request: Request):
+    from db.catalyst_client import run_zcql_query
+    headers = {k.lower(): v for k, v in request.headers.items()}
 
     def _query():
-        zcql = get_catalyst_zcql()
-        return zcql.execute_query("SELECT * FROM state")
+        return run_zcql_query("SELECT * FROM state", headers)
 
-    results = await asyncio.to_thread(_query)
-    return {"results": results}
+    return await asyncio.to_thread(_query)
 
 
 @app.get("/health")
