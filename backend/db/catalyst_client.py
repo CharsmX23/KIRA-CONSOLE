@@ -29,5 +29,6 @@ def run_zcql_query(query: str, inbound_headers: dict) -> dict:
         },
         timeout=15,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        raise ValueError(f"HTTP {resp.status_code} — body: {resp.text[:500]} — url: {resp.url}")
     return resp.json()
