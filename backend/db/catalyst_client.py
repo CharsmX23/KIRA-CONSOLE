@@ -18,7 +18,7 @@ def run_zcql_query(query: str, inbound_headers: dict) -> dict:
     )
 
     resp = requests.post(
-        f"{console_url}/baas/v1/project/{project_id}/query",
+        f"{console_url}/baas/v1/project/{project_id}/zcql/execute",
         json={"query": query},
         headers={
             "Authorization": auth,
