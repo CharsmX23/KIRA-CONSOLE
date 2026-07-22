@@ -6,8 +6,9 @@ def run_zcql_query(query: str, inbound_headers: dict) -> dict:
     project_id = inbound_headers.get("x-zc-projectid")
     admin_token = inbound_headers.get("x-zc-admin-cred-token")
     cred_type = inbound_headers.get("x-zc-admin-cred-type", "token")
+    project_secret_key = inbound_headers.get("x-zc-project-secret-key", "")
     console_url = os.environ.get(
-        "X_ZOHO_CATALYST_CONSOLE_URL", "https://api.catalyst.zoho.com"
+        "X_ZOHO_CATALYST_CONSOLE_URL", "https://api.catalyst.zoho.in"
     )
     environment = inbound_headers.get("x-zc-environment", "Development")
 
@@ -24,6 +25,7 @@ def run_zcql_query(query: str, inbound_headers: dict) -> dict:
             "Authorization": auth,
             "Accept": "application/vnd.catalyst.v2+zcql",
             "Content-Type": "application/json",
+            "X-ZC-PROJECT-SECRET-KEY": project_secret_key,
             "Environment": environment,
             "CATALYST-ORG": os.environ.get("X_ZOHO_CATALYST_ORG_ID", ""),
         },

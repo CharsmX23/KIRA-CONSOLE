@@ -458,16 +458,10 @@ async def delete_document_endpoint(
 
 @app.get("/api/catalyst-test")
 async def catalyst_test(request: Request):
-    import traceback
     from db.catalyst_client import run_zcql_query
     headers = {k.lower(): v for k, v in request.headers.items()}
-
     def _query():
-        try:
-            return run_zcql_query("SELECT * FROM state", headers)
-        except Exception as e:
-            return {"error": str(e), "type": type(e).__name__, "trace": traceback.format_exc()[-1000:]}
-
+        return run_zcql_query("SELECT * FROM state", headers)
     return await asyncio.to_thread(_query)
 
 
