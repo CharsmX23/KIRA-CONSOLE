@@ -1,0 +1,4 @@
+UnitID,UnitName,TypeID,ParentUnit,NationalityID,StateID,DistrictID,Active
+1,Whitefield Police Station,1,,1,1,1,true
+2,Electronic City Police Station,1,,1,1,1,true
+3,Kempegowda Bus Stand Police Station,1,,1,1,1,true

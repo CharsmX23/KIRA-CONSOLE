@@ -1,0 +1,8 @@
+ActCode,SectionCode,SectionDescription,Active
+IPC,302,Murder,true
+IPC,307,Attempt to murder,true
+IPC,420,Cheating and dishonestly inducing delivery of property,true
+IPC,392,Robbery,true
+NDPS,21,Punishment for possession/trafficking of manufactured drugs,true
+PMLA,3,Offence of money laundering,true
+PMLA,4,Punishment for money laundering,true

@@ -4,5 +4,11 @@
       "name": "kira-console",
       "source": "/home/charsm/Desktop/KSPH26/dist"
     }
+  ],
+  "appsail": [
+    {
+      "source": ".",
+      "name": "Kiraconsole"
+    }
   ]
 }

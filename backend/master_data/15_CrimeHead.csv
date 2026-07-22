@@ -1,0 +1,5 @@
+CrimeHeadID,CrimeGroupName,Active
+1,Crimes Against Body,true
+2,Crimes Against Property,true
+3,Narcotics,true
+4,Economic Offences,true

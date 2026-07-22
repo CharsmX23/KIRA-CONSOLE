@@ -1,0 +1,4 @@
+DesignationID,DesignationName,Active,SortOrder
+1,Investigating Officer,true,1
+2,Station House Officer,true,2
+3,Constable Duty,true,3
