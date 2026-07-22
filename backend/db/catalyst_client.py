@@ -18,10 +18,11 @@ def run_zcql_query(query: str, inbound_headers: dict) -> dict:
     )
 
     resp = requests.post(
-        f"{console_url}/baas/v1/project/{project_id}/zcql/execute",
-        json={"zcql_query": query},
+        f"{console_url}/baas/v1/project/{project_id}/query",
+        json={"query": query},
         headers={
             "Authorization": auth,
+            "Accept": "application/vnd.catalyst.v2+zcql",
             "Content-Type": "application/json",
             "Environment": environment,
             "CATALYST-ORG": os.environ.get("X_ZOHO_CATALYST_ORG_ID", ""),
