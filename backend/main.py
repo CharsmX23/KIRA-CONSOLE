@@ -163,9 +163,26 @@ _CORS_HEADERS = {
     "Access-Control-Max-Age": "86400",
 }
 
-# ZGS (Zoho Gateway Server) strips Access-Control-Request-Method from OPTIONS
-# before forwarding to FastAPI, so CORSMiddleware never fires its preflight logic.
-# Explicit OPTIONS handlers return CORS headers unconditionally.
+# ZGS (Zoho Gateway Server) strips Access-Control-Request-Method (and sometimes Origin)
+# from OPTIONS before forwarding, so Starlette's CORSMiddleware never fires its preflight
+# logic and no Access-Control-Allow-Origin header gets attached — the browser then blocks
+# the POST /api/chat preflight. This outermost middleware is ZGS-proof: it answers every
+# OPTIONS directly with the CORS headers and force-stamps them onto every other response.
+@app.middleware("http")
+async def force_cors(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(status_code=200, headers=_CORS_HEADERS)
+    try:
+        response = await call_next(request)
+    except Exception:
+        # Even a crash must carry CORS headers, else the browser reports a misleading
+        # "CORS error" instead of surfacing the real failure.
+        response = Response("Internal Server Error", status_code=500)
+    for k, v in _CORS_HEADERS.items():
+        response.headers[k] = v
+    return response
+
+
 @app.options("/api/{path:path}")
 def options_handler():
     return Response(status_code=200, headers=_CORS_HEADERS)
@@ -637,7 +654,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v17-auth-hardened", "ts": "2026-07-23-o"}
+    return {"version": "seed-v18-cors-bulletproof", "ts": "2026-07-23-p"}
 
 
 @app.get("/health")
