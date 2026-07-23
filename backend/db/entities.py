@@ -166,12 +166,27 @@ def get_suspect_cases_from_catalyst(name: str, inbound_headers: dict) -> list:
     return [r.get("CaseMaster", r) for r in case_result.get("data", [])]
 
 
-def get_entity_data(workspace: str, entity: str | None) -> dict | None:
-    """Fetch relevant entity data based on workspace type, passed to the responder for context."""
+def get_entity_data(workspace: str, entity: str | None, inbound_headers: dict | None = None) -> dict | None:
+    """Fetch relevant entity data based on workspace type, passed to the responder for context.
+
+    When inbound_headers are supplied (live /api/chat request), suspect data reads from the
+    Catalyst Data Store; evidence and computed_risk still come from Supabase (no Catalyst table).
+    """
     if not entity:
         return None
 
     if workspace == "suspect":
+        if inbound_headers is not None:
+            suspect = get_suspect_from_catalyst(entity, inbound_headers)
+            if not suspect:
+                return None
+            from agents.risk_scoring import get_risk_score_for_suspect
+            return {
+                "suspect": suspect,
+                "cases": get_suspect_cases_from_catalyst(entity, inbound_headers),
+                "evidence": get_suspect_evidence(entity),
+                "computed_risk": get_risk_score_for_suspect(entity),
+            }
         suspect = get_suspect(entity)
         if not suspect:
             return None

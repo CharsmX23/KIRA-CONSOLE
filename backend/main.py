@@ -166,7 +166,7 @@ def options_handler():
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user)):
+async def chat(req: ChatRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Main conversational AI endpoint.
     Streams two SSE events:
@@ -177,6 +177,7 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
     session_id = req.session_id or str(uuid.uuid4())
     user_id = current_user["user_id"]
     officer_role = current_user["role"]
+    inbound_headers = {k.lower(): v for k, v in request.headers.items()}
 
     async def generate():
         # Yield immediately so CORS + SSE headers are flushed before any blocking I/O.
@@ -243,7 +244,7 @@ async def chat(req: ChatRequest, current_user: dict = Depends(get_current_user))
         }
         yield f"data: {json.dumps(signal_event)}\n\n"
 
-        entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity)
+        entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity, inbound_headers)
         history = await asyncio.to_thread(get_history, session_id, 8)
 
         rag_context: list[str] = []
@@ -593,7 +594,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v14-suspect-cases", "ts": "2026-07-23-l"}
+    return {"version": "seed-v15-chat-wired-catalyst", "ts": "2026-07-23-m"}
 
 
 @app.get("/health")
