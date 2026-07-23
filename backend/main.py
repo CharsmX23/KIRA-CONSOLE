@@ -575,29 +575,16 @@ async def case_catalyst(request: Request):
 
 @app.get("/api/suspect-catalyst")
 async def suspect_catalyst(request: Request, name: str = "Arjun"):
-    from db.catalyst_client import run_zcql_query
     from db.entities import get_suspect_from_catalyst
     h = {k.lower(): v for k, v in request.headers.items()}
-    def _try(q):
-        try:
-            return run_zcql_query(q, h).get("data", [])
-        except Exception as e:
-            return str(e)[:300]
     def _fetch():
-        return {
-            "trailing_pct": _try("SELECT * FROM Accused WHERE AccusedName LIKE 'Rajesh%'"),
-            "leading_pct": _try("SELECT * FROM Accused WHERE AccusedName LIKE '%Mehta'"),
-            "star_wild": _try("SELECT * FROM Accused WHERE AccusedName LIKE '*Rajesh*'"),
-            "like_exact_full": _try("SELECT * FROM Accused WHERE AccusedName LIKE 'Rajesh Kumar Mehta'"),
-            "double_pct_json": _try("SELECT * FROM Accused WHERE AccusedName LIKE '%%Rajesh%%'"),
-            "in_operator": _try("SELECT * FROM Accused WHERE AccusedName IN ('Rajesh Kumar Mehta','Salim Khan')"),
-        }
+        return get_suspect_from_catalyst(name, h)
     return await asyncio.to_thread(_fetch)
 
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v11-wildcard-battery", "ts": "2026-07-23-i"}
+    return {"version": "seed-v12-star-wildcard", "ts": "2026-07-23-j"}
 
 
 @app.get("/health")
