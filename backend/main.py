@@ -573,9 +573,29 @@ async def case_catalyst(request: Request):
     return await asyncio.to_thread(_fetch)
 
 
+@app.get("/api/suspect-catalyst")
+async def suspect_catalyst(request: Request, name: str = "Arjun"):
+    from db.catalyst_client import run_zcql_query
+    from db.entities import get_suspect_from_catalyst
+    h = {k.lower(): v for k, v in request.headers.items()}
+    def _try(q):
+        try:
+            return run_zcql_query(q, h).get("data", [])
+        except Exception as e:
+            return str(e)[:300]
+    def _fetch():
+        return {
+            "like_pct": _try(f"SELECT * FROM Accused WHERE AccusedName LIKE '%{name}%'"),
+            "like_nopct": _try(f"SELECT * FROM Accused WHERE AccusedName LIKE '{name}'"),
+            "eq_exact": _try("SELECT * FROM Accused WHERE AccusedName = 'Rajesh Kumar Mehta'"),
+            "like_full": _try("SELECT * FROM Accused WHERE AccusedName LIKE '%Rajesh%'"),
+        }
+    return await asyncio.to_thread(_fetch)
+
+
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v8-catalyst-reads", "ts": "2026-07-23-f"}
+    return {"version": "seed-v10-like-debug", "ts": "2026-07-23-h"}
 
 
 @app.get("/health")
