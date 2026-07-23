@@ -585,17 +585,19 @@ async def suspect_catalyst(request: Request, name: str = "Arjun"):
             return str(e)[:300]
     def _fetch():
         return {
-            "like_pct": _try(f"SELECT * FROM Accused WHERE AccusedName LIKE '%{name}%'"),
-            "like_nopct": _try(f"SELECT * FROM Accused WHERE AccusedName LIKE '{name}'"),
-            "eq_exact": _try("SELECT * FROM Accused WHERE AccusedName = 'Rajesh Kumar Mehta'"),
-            "like_full": _try("SELECT * FROM Accused WHERE AccusedName LIKE '%Rajesh%'"),
+            "trailing_pct": _try("SELECT * FROM Accused WHERE AccusedName LIKE 'Rajesh%'"),
+            "leading_pct": _try("SELECT * FROM Accused WHERE AccusedName LIKE '%Mehta'"),
+            "star_wild": _try("SELECT * FROM Accused WHERE AccusedName LIKE '*Rajesh*'"),
+            "like_exact_full": _try("SELECT * FROM Accused WHERE AccusedName LIKE 'Rajesh Kumar Mehta'"),
+            "double_pct_json": _try("SELECT * FROM Accused WHERE AccusedName LIKE '%%Rajesh%%'"),
+            "in_operator": _try("SELECT * FROM Accused WHERE AccusedName IN ('Rajesh Kumar Mehta','Salim Khan')"),
         }
     return await asyncio.to_thread(_fetch)
 
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v10-like-debug", "ts": "2026-07-23-h"}
+    return {"version": "seed-v11-wildcard-battery", "ts": "2026-07-23-i"}
 
 
 @app.get("/health")
