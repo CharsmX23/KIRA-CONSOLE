@@ -575,16 +575,26 @@ async def case_catalyst(request: Request):
 
 @app.get("/api/suspect-catalyst")
 async def suspect_catalyst(request: Request, name: str = "Arjun"):
+    from db.catalyst_client import run_zcql_query
     from db.entities import get_suspect_from_catalyst
     h = {k.lower(): v for k, v in request.headers.items()}
     def _fetch():
-        return get_suspect_from_catalyst(name, h)
+        out = {}
+        try:
+            out["raw_arrest"] = run_zcql_query("SELECT * FROM ArrestSurrender", h).get("data", [])
+        except Exception as e:
+            out["raw_arrest_error"] = str(e)[:400]
+        try:
+            out["suspect"] = get_suspect_from_catalyst(name, h)
+        except Exception as e:
+            out["suspect_error"] = str(e)[:400]
+        return out
     return await asyncio.to_thread(_fetch)
 
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v12-star-wildcard", "ts": "2026-07-23-j"}
+    return {"version": "seed-v13-arrest-debug", "ts": "2026-07-23-k"}
 
 
 @app.get("/health")
