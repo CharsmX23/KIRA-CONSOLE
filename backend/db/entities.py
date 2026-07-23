@@ -129,14 +129,41 @@ def get_suspect_from_catalyst(name: str, inbound_headers: dict) -> dict | None:
         return None
     accused = rows[0].get("Accused", rows[0])
 
-    arrest_result = run_zcql_query(
-        f"SELECT * FROM ArrestSurrender WHERE AccusedName LIKE '*{name}*'",
-        inbound_headers,
-    )
-    arrest_rows = arrest_result.get("data", [])
-    arrest = arrest_rows[0].get("ArrestSurrender", arrest_rows[0]) if arrest_rows else {}
+    # ArrestSurrender has no AccusedName column — it links via AccusedMasterID
+    accused_master_id = accused.get("AccusedMasterID")
+    arrest = {}
+    if accused_master_id is not None:
+        arrest_result = run_zcql_query(
+            f"SELECT * FROM ArrestSurrender WHERE AccusedMasterID = {accused_master_id}",
+            inbound_headers,
+        )
+        arrest_rows = arrest_result.get("data", [])
+        arrest = arrest_rows[0].get("ArrestSurrender", arrest_rows[0]) if arrest_rows else {}
 
     return {**accused, "arrest": arrest}
+
+
+def get_suspect_cases_from_catalyst(name: str, inbound_headers: dict) -> list:
+    accused_result = run_zcql_query(
+        f"SELECT * FROM Accused WHERE AccusedName LIKE '*{name}*'",
+        inbound_headers,
+    )
+    rows = accused_result.get("data", [])
+    if not rows:
+        return []
+    case_ids = {
+        r.get("Accused", r).get("CaseMasterID")
+        for r in rows
+        if r.get("Accused", r).get("CaseMasterID") is not None
+    }
+    if not case_ids:
+        return []
+    id_list = ",".join(str(cid) for cid in case_ids)
+    case_result = run_zcql_query(
+        f"SELECT * FROM CaseMaster WHERE CaseMasterID IN ({id_list})",
+        inbound_headers,
+    )
+    return [r.get("CaseMaster", r) for r in case_result.get("data", [])]
 
 
 def get_entity_data(workspace: str, entity: str | None) -> dict | None:
