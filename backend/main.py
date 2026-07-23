@@ -118,7 +118,13 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
         print(f"[KIRA backend] get_current_user: token decode failed — {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
-    profile = await asyncio.to_thread(get_user_profile, user_id)
+    try:
+        profile = await asyncio.to_thread(get_user_profile, user_id)
+    except HTTPException:
+        raise
+    except Exception as prof_err:
+        print(f"[KIRA backend] get_current_user: profile lookup failed — {prof_err}", flush=True)
+        raise HTTPException(status_code=502, detail="Profile service unavailable")
     if not profile:
         print(f"[KIRA backend] get_current_user: no profile found for user_id={user_id}")
         raise HTTPException(status_code=403, detail="No officer profile found for this account")
@@ -180,6 +186,22 @@ async def chat(req: ChatRequest, request: Request, current_user: dict = Depends(
     inbound_headers = {k.lower(): v for k, v in request.headers.items()}
 
     async def generate():
+        try:
+            async for chunk in _generate_impl():
+                yield chunk
+        except Exception as fatal_err:
+            # Last-resort net: never let the SSE stream die silently (browser shows
+            # "Connection error"). Always emit a narration + done so the UI recovers.
+            print(f"[KIRA] chat stream fatal error: {fatal_err}", flush=True)
+            fallback = (
+                "ಕ್ಷಮಿಸಿ, ಸಂಪರ್ಕದಲ್ಲಿ ಸಮಸ್ಯೆ ಉಂಟಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
+                if req.lang == "kn"
+                else "Sorry, something went wrong handling that. Please try again."
+            )
+            yield f"data: {json.dumps({'event': 'narration', 'text': fallback, 'lang': req.lang})}\n\n"
+            yield f"data: {json.dumps({'event': 'done', 'session_id': session_id})}\n\n"
+
+    async def _generate_impl():
         # Yield immediately so CORS + SSE headers are flushed before any blocking I/O.
         # AppSail's proxy drops silent connections; this heartbeat keeps it alive.
         yield f"data: {json.dumps({'event': 'heartbeat'})}\n\n"
@@ -244,8 +266,19 @@ async def chat(req: ChatRequest, request: Request, current_user: dict = Depends(
         }
         yield f"data: {json.dumps(signal_event)}\n\n"
 
-        entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity, inbound_headers)
-        history = await asyncio.to_thread(get_history, session_id, 8)
+        # Entity data enrichment must never break the chat stream. If the Catalyst/Supabase
+        # lookup fails, the AI still answers from the query + history alone.
+        try:
+            entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity, inbound_headers)
+        except Exception as ed_err:
+            print(f"[KIRA] get_entity_data failed ({target_workspace}/{entity}): {ed_err}", flush=True)
+            entity_data = None
+
+        try:
+            history = await asyncio.to_thread(get_history, session_id, 8)
+        except Exception as h_err:
+            print(f"[KIRA] get_history failed: {h_err}", flush=True)
+            history = []
 
         rag_context: list[str] = []
         try:
@@ -254,16 +287,24 @@ async def chat(req: ChatRequest, request: Request, current_user: dict = Depends(
         except Exception as rag_err:
             print(f"[RAG] Retrieval skipped: {rag_err}")
 
-        narration = await asyncio.to_thread(
-            generate_response,
-            req.query,
-            target_workspace,
-            entity,
-            entity_data,
-            history,
-            lang,
-            rag_context,
-        )
+        try:
+            narration = await asyncio.to_thread(
+                generate_response,
+                req.query,
+                target_workspace,
+                entity,
+                entity_data,
+                history,
+                lang,
+                rag_context,
+            )
+        except Exception as gen_err:
+            print(f"[KIRA] generate_response failed: {gen_err}", flush=True)
+            narration = (
+                "ಕ್ಷಮಿಸಿ, ಪ್ರತಿಕ್ರಿಯೆ ರಚಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
+                if lang == "kn"
+                else "Sorry, I couldn't generate a response just now. Please try again."
+            )
 
         # Event 2: AI narration text + optional map action
         narration_event: dict = {"event": "narration", "text": narration, "lang": lang}
@@ -272,17 +313,19 @@ async def chat(req: ChatRequest, request: Request, current_user: dict = Depends(
             narration_event["map_action"] = map_action
         yield f"data: {json.dumps(narration_event)}\n\n"
 
-        await asyncio.to_thread(update_session, session_id, target_workspace, entity)
-
-        workspace_signal_record = {
-            "workspace": target_workspace,
-            "action": action,
-            "entity": entity,
-            "confidence": confidence,
-        }
-        await asyncio.to_thread(
-            save_message, session_id, "ai", narration, user_id, workspace_signal_record
-        )
+        try:
+            await asyncio.to_thread(update_session, session_id, target_workspace, entity)
+            workspace_signal_record = {
+                "workspace": target_workspace,
+                "action": action,
+                "entity": entity,
+                "confidence": confidence,
+            }
+            await asyncio.to_thread(
+                save_message, session_id, "ai", narration, user_id, workspace_signal_record
+            )
+        except Exception as save_err:
+            print(f"[KIRA] session persist failed: {save_err}", flush=True)
 
         yield f"data: {json.dumps({'event': 'done', 'session_id': session_id})}\n\n"
 
@@ -594,7 +637,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v15-chat-wired-catalyst", "ts": "2026-07-23-m"}
+    return {"version": "seed-v17-auth-hardened", "ts": "2026-07-23-o"}
 
 
 @app.get("/health")
