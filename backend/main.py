@@ -465,6 +465,119 @@ async def catalyst_test(request: Request):
     return await asyncio.to_thread(_query)
 
 
+@app.get("/api/seed-status")
+async def seed_status(request: Request):
+    import requests as req
+    import os
+    from db.catalyst_client import run_zcql_query
+    h = {k.lower(): v for k, v in request.headers.items()}
+    project_id = h.get("x-zc-projectid")
+    token = h.get("x-zc-admin-cred-token")
+    cred_type = h.get("x-zc-admin-cred-type", "token")
+    secret = h.get("x-zc-project-secret-key", "")
+    env = h.get("x-zc-environment", "Development")
+    base = os.environ.get("X_ZOHO_CATALYST_CONSOLE_URL", "https://api.catalyst.zoho.in")
+    auth = f"Zoho-ticket {token}" if cred_type == "ticket" else f"Zoho-oauthtoken {token}"
+
+    def _check():
+        # List all table names
+        r = req.get(f"{base}/baas/v1/project/{project_id}/table",
+                    headers={"Authorization": auth, "X-ZC-PROJECT-SECRET-KEY": secret, "Environment": env},
+                    timeout=15)
+        all_tables = [t["table_name"] for t in r.json().get("data", [])] if r.ok else [f"err:{r.status_code}"]
+
+        # Current counts in each transactional table
+        counts = {}
+        for t in ["CaseMaster", "ComplainantDetails", "Victim", "Accused", "ArrestSurrender", "ActSectionAssociation"]:
+            try:
+                res = run_zcql_query(f"SELECT * FROM {t}", h)
+                counts[t] = {"count": len(res.get("data", [])), "data": res.get("data", [])}
+            except Exception as e:
+                counts[t] = {"error": str(e)[:200]}
+
+        # Try act/section table name variants
+        act_tries = {}
+        for name in ["Act", "act", "ActMaster"]:
+            try:
+                res = run_zcql_query(f"SELECT * FROM {name}", h)
+                act_tries[name] = res.get("data", [])
+            except Exception as e:
+                act_tries[name] = str(e)[:150]
+
+        sec_tries = {}
+        for name in ["section", "Section", "SectionMaster"]:
+            try:
+                res = run_zcql_query(f"SELECT * FROM {name}", h)
+                sec_tries[name] = res.get("data", [])
+            except Exception as e:
+                sec_tries[name] = str(e)[:150]
+
+        return {"all_tables": all_tables, "transactional_counts": counts, "act_tries": act_tries, "sec_tries": sec_tries}
+
+    return await asyncio.to_thread(_check)
+
+
+@app.get("/api/seed-case")
+async def seed_case(request: Request):
+    from db.catalyst_client import run_zcql_query
+    h = {k.lower(): v for k, v in request.headers.items()}
+    results = {}
+
+    def _seed():
+        # ActSectionAssociation — ActID/SectionID are varchar (ActCode/SectionCode)
+        try:
+            run_zcql_query(
+                "INSERT INTO ActSectionAssociation (CaseMasterID, ActID, SectionID, ActOrderID, SectionOrderID) "
+                "VALUES (1, 'NDPS', '21', 1, 1)",
+                h
+            )
+            results["ActSection_NDPS21"] = "ok"
+        except Exception as e:
+            results["ActSection_NDPS21_error"] = str(e)[:400]
+
+        try:
+            run_zcql_query(
+                "INSERT INTO ActSectionAssociation (CaseMasterID, ActID, SectionID, ActOrderID, SectionOrderID) "
+                "VALUES (1, 'PMLA', '3', 2, 1)",
+                h
+            )
+            results["ActSection_PMLA3"] = "ok"
+        except Exception as e:
+            results["ActSection_PMLA3_error"] = str(e)[:400]
+
+        try:
+            run_zcql_query(
+                "INSERT INTO ActSectionAssociation (CaseMasterID, ActID, SectionID, ActOrderID, SectionOrderID) "
+                "VALUES (1, 'PMLA', '4', 2, 2)",
+                h
+            )
+            results["ActSection_PMLA4"] = "ok"
+        except Exception as e:
+            results["ActSection_PMLA4_error"] = str(e)[:400]
+
+        return results
+
+    return await asyncio.to_thread(_seed)
+
+
+@app.get("/api/case-catalyst")
+async def case_catalyst(request: Request):
+    from db.entities import get_case_from_catalyst, get_victims_from_catalyst, get_accused_from_catalyst
+    h = {k.lower(): v for k, v in request.headers.items()}
+    def _fetch():
+        return {
+            "case": get_case_from_catalyst(1, h),
+            "victims": get_victims_from_catalyst(1, h),
+            "accused": get_accused_from_catalyst(1, h),
+        }
+    return await asyncio.to_thread(_fetch)
+
+
+@app.get("/api/version-check")
+def version_check():
+    return {"version": "seed-v8-catalyst-reads", "ts": "2026-07-23-f"}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "KIRA Conversational AI"}

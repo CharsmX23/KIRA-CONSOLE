@@ -1,6 +1,7 @@
 import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from db.catalyst_client import run_zcql_query
 
 load_dotenv()
 
@@ -91,6 +92,31 @@ def get_victims_for_case(case_id: str) -> list:
 def get_victim(name: str) -> dict | None:
     result = _get_supabase().table("victims").select("*").ilike("name", f"%{name}%").limit(1).execute()
     return result.data[0] if result.data else None
+
+
+def get_case_from_catalyst(case_master_id: int, inbound_headers: dict) -> dict | None:
+    result = run_zcql_query(
+        f"SELECT * FROM CaseMaster WHERE CaseMasterID = {case_master_id}",
+        inbound_headers,
+    )
+    rows = result.get("data", [])
+    return rows[0].get("CaseMaster") if rows else None
+
+
+def get_victims_from_catalyst(case_master_id: int, inbound_headers: dict) -> list:
+    result = run_zcql_query(
+        f"SELECT * FROM Victim WHERE CaseMasterID = {case_master_id}",
+        inbound_headers,
+    )
+    return [r.get("Victim", r) for r in result.get("data", [])]
+
+
+def get_accused_from_catalyst(case_master_id: int, inbound_headers: dict) -> list:
+    result = run_zcql_query(
+        f"SELECT * FROM Accused WHERE CaseMasterID = {case_master_id}",
+        inbound_headers,
+    )
+    return [r.get("Accused", r) for r in result.get("data", [])]
 
 
 def get_entity_data(workspace: str, entity: str | None) -> dict | None:
