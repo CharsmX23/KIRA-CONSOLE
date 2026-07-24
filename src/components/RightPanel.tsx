@@ -221,6 +221,24 @@ export function RightPanel({
           gap: 8,
         }}
       >
+        {chat.length === 0 && (
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            color: 'var(--text-tertiary, #64748B)',
+            textAlign: 'center',
+            padding: '24px 16px',
+          }}>
+            <Shield size={26} color="var(--accent-blue, #4D9EF5)" style={{ opacity: 0.7 }} />
+            <div style={{ fontSize: scaledFontSize(13, lang), fontFamily: kn(lang) ? "'Noto Sans Kannada', 'Inter', sans-serif" : undefined }}>
+              {t('readyToAssist', lang)}
+            </div>
+          </div>
+        )}
         {chat.map((msg, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: msg.role === 'officer' ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: 6 }}>
             {msg.role === 'ai' && (

@@ -16,7 +16,7 @@ import { AuditWorkspace } from './workspaces/AuditWorkspace';
 import { EntityDrawer } from './components/drawers/EntityDrawer';
 import { EvidenceDrawer } from './components/drawers/EvidenceDrawer';
 import { Lang, t } from './i18n/translations';
-import { INITIAL_CHAT, RECENT_ARRESTS } from './data';
+import { RECENT_ARRESTS } from './data';
 import { sendChat } from './services/kiraApi';
 import { supabase, UserProfile } from './lib/supabase';
 
@@ -117,7 +117,9 @@ export default function App() {
   const [workspaceLabel, setWorkspaceLabel] = useState('Supervision');
   const [subjectName, setSubjectName] = useState<string | undefined>(undefined);
   const [caseId, setCaseId] = useState<string>('KS1207');
-  const [chat, setChat] = useState<ChatMessage[]>(INITIAL_CHAT);
+  // Fresh login starts with an empty chat (a "Ready to assist" placeholder renders in
+  // RightPanel). INITIAL_CHAT was demo seed data — not a real resume feature.
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'transcribing' | 'processing'>('idle');
   const [isMuted, setIsMuted] = useState<boolean>(() => localStorage.getItem('kira_voice_muted') === 'true');

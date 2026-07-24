@@ -108,6 +108,7 @@ export const T = {
   whitefieldHotspots: { en: 'Whitefield hotspots', kn: 'ವೈಟ್‌ಫೀಲ್ಡ್ ಹಾಟ್‌ಸ್ಪಾಟ್‌ಗಳು' },
   recentArrests: { en: 'Recent arrests', kn: 'ಇತ್ತೀಚಿನ ಬಂಧನಗಳು' },
   inputPlaceholder: { en: 'Ask anything about a suspect, case, or crime pattern...', kn: 'ಶಂಕಿತ, ಪ್ರಕರಣ ಅಥವಾ ಅಪರಾಧ ಮಾದರಿಯ ಬಗ್ಗೆ ಏನಾದರೂ ಕೇಳಿ...' },
+  readyToAssist: { en: 'Ready to assist. Ask about a suspect, case, or crime pattern.', kn: 'ಸಹಾಯಕ್ಕೆ ಸಿದ್ಧ. ಶಂಕಿತ, ಪ್ರಕರಣ ಅಥವಾ ಅಪರಾಧ ಮಾದರಿಯ ಬಗ್ಗೆ ಕೇಳಿ.' },
   analyze: { en: 'Analyze', kn: 'ವಿಶ್ಲೇಷಿಸಿ' },
   voice: { en: 'Voice', kn: 'ಧ್ವನಿ' },
 
