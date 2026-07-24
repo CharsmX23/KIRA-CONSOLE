@@ -694,7 +694,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v24-fix-supabase-import", "ts": "2026-07-24-a"}
+    return {"version": "seed-v25-llm-timeouts", "ts": "2026-07-24-b"}
 
 
 @app.get("/health")

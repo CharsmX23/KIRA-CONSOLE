@@ -146,6 +146,8 @@ def generate_response(
             messages=messages,
             max_tokens=300,
             temperature=0.4,
+            timeout=20,  # bound the call so a hung Cerebras request raises instead of
+                         # blocking the SSE stream forever (caught below → fallback text)
         )
         return response.choices[0].message.content.strip()
     except Exception as e:

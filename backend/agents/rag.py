@@ -46,6 +46,7 @@ def _embed(texts: List[str], task: str = "retrieval_document") -> List[List[floa
             model="models/text-embedding-004",
             content=txt,
             task_type=task,
+            request_options={"timeout": 8},  # bound the embed; caller skips RAG on timeout
         )["embedding"]
         for txt in texts
     ]

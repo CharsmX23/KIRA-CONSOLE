@@ -85,6 +85,7 @@ Classify this query.
             ],
             max_tokens=200,
             temperature=0.05,
+            timeout=12,  # bound the call; on timeout the except below falls back to "stay"
         )
         raw = response.choices[0].message.content.strip()
         raw = raw.replace("```json", "").replace("```", "").strip()
