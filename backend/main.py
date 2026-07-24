@@ -92,13 +92,23 @@ def extract_map_action(query: str) -> dict | None:
 # --------------- auth dependency ---------------
 
 async def get_current_user(authorization: str = Header(None)) -> dict:
-    """Validate the Supabase JWT and return the authenticated officer's profile."""
+    """Validate the Supabase JWT (from the Authorization header) and return the officer profile.
+
+    Used by every authenticated endpoint EXCEPT /api/chat, which sources the token from the
+    request body to stay a preflight-free 'simple' CORS request (the ZGS gateway answers all
+    OPTIONS preflights itself and never forwards them to this app).
+    """
     if not authorization or not authorization.startswith("Bearer "):
         print("[KIRA backend] get_current_user: missing or malformed Authorization header")
         raise HTTPException(status_code=401, detail="Missing authentication token")
+    return await verify_token(authorization.split(" ", 1)[1])
 
-    token = authorization.split(" ", 1)[1]
-    print(f"[KIRA backend] get_current_user: decoding token (prefix: {token[:20]}…)")
+
+async def verify_token(token: str) -> dict:
+    """Verify a raw Supabase JWT (same JWKS/ES256 checks as header auth) and return the profile."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing authentication token")
+    print(f"[KIRA backend] verify_token: decoding token (prefix: {token[:20]}…)")
 
     try:
         signing_key = _jwks_client.get_signing_key_from_jwt(token)
@@ -110,12 +120,12 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
         )
         user_id = payload["sub"]
         exp = payload.get("exp")
-        print(f"[KIRA backend] get_current_user: token valid — user_id={user_id}, exp={exp}")
+        print(f"[KIRA backend] verify_token: token valid — user_id={user_id}, exp={exp}")
     except pyjwt.ExpiredSignatureError:
-        print("[KIRA backend] get_current_user: token EXPIRED")
+        print("[KIRA backend] verify_token: token EXPIRED")
         raise HTTPException(status_code=401, detail="Token has expired — please sign in again")
     except Exception as e:
-        print(f"[KIRA backend] get_current_user: token decode failed — {e}")
+        print(f"[KIRA backend] verify_token: token decode failed — {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
     try:
@@ -123,13 +133,13 @@ async def get_current_user(authorization: str = Header(None)) -> dict:
     except HTTPException:
         raise
     except Exception as prof_err:
-        print(f"[KIRA backend] get_current_user: profile lookup failed — {prof_err}", flush=True)
+        print(f"[KIRA backend] verify_token: profile lookup failed — {prof_err}", flush=True)
         raise HTTPException(status_code=502, detail="Profile service unavailable")
     if not profile:
-        print(f"[KIRA backend] get_current_user: no profile found for user_id={user_id}")
+        print(f"[KIRA backend] verify_token: no profile found for user_id={user_id}")
         raise HTTPException(status_code=403, detail="No officer profile found for this account")
 
-    print(f"[KIRA backend] get_current_user: authorized — {profile['full_name']} ({profile['role']})")
+    print(f"[KIRA backend] verify_token: authorized — {profile['full_name']} ({profile['role']})")
     return {
         "user_id": user_id,
         "role": profile["role"],
@@ -172,14 +182,31 @@ def options_handler():
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest, request: Request, current_user: dict = Depends(get_current_user)):
+async def chat(request: Request):
     """
     Main conversational AI endpoint.
     Streams two SSE events:
       1. workspace_signal (~200ms) — Cerebras router result, triggers frontend animation
       2. narration (~1-2s)        — Gemini response text for the chat panel
-    Requires a valid Supabase JWT. Enforces role-based content restrictions.
+
+    Auth token and params arrive in the JSON body (sent as text/plain) instead of the
+    Authorization header, so the browser issues no OPTIONS preflight — the ZGS gateway
+    answers preflights itself and never forwards them to this app, which would otherwise
+    block the request cross-origin. Token verification is identical to header auth.
     """
+    raw = await request.body()
+    try:
+        data = json.loads(raw or b"{}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Malformed request body")
+
+    req = ChatRequest(
+        query=data.get("query", ""),
+        session_id=data.get("session_id") or "",
+        lang=data.get("lang", "en"),
+    )
+    current_user = await verify_token(data.get("access_token", ""))
+
     session_id = req.session_id or str(uuid.uuid4())
     user_id = current_user["user_id"]
     officer_role = current_user["role"]
@@ -637,7 +664,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v20-cors-knowngood", "ts": "2026-07-23-r"}
+    return {"version": "seed-v21-chat-body-token", "ts": "2026-07-23-s"}
 
 
 @app.get("/health")

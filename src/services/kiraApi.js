@@ -67,13 +67,21 @@ export async function sendChat(query, sessionId, lang, onSignal, onNarration, on
 
   try {
     console.log('[KIRA step 8] Sending fetch to /api/chat');
+    // Sent as a "simple" CORS request (text/plain, no Authorization header) so the browser
+    // issues no OPTIONS preflight — the ZGS gateway answers preflights itself and never
+    // forwards them to the app, which blocks the request cross-origin. The Supabase token
+    // travels in the body and is verified server-side exactly as a header token would be.
     const response = await fetch(`${BASE}/api/chat`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ query, session_id: sessionId, lang }),
+      body: JSON.stringify({
+        query,
+        session_id: sessionId,
+        lang,
+        access_token: session.access_token,
+      }),
     });
 
     console.log('[KIRA step 9] Response status:', response.status);
