@@ -47,8 +47,11 @@ RETURN FORMAT (strict JSON, nothing else):
 }
 
 RULES:
-- If the query is a follow-up about the CURRENT entity (e.g. "show his cases",
-  "what about his gang"), keep the same entity from context
+- If the query explicitly names a person (e.g. "tell me about Salim Khan"), set entity to
+  THAT person and action to "navigate" — even when a different entity is currently being
+  viewed. A newly named person always replaces the current entity; never carry the old one.
+- Only keep the entity from context when the query is a pronoun/possessive follow-up with NO
+  new name (e.g. "show his cases", "what about her gang", "his arrest record").
 - If no specific entity is mentioned and action is navigate, set entity to null
 - If query is in Kannada, set language to "kn"
 - For greetings or unclear queries, return workspace "supervision", action "stay"

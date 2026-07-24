@@ -2,19 +2,21 @@ import { supabase } from '../lib/supabase';
 
 const BASE = import.meta.env.VITE_API_URL || 'https://kiraconsole.development.catalystappsail.in';
 
-async function _authHeaders() {
+async function _token() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
-  return { Authorization: `Bearer ${session.access_token}` };
+  return session.access_token;
 }
 
 export async function uploadDocument(file) {
-  const headers = await _authHeaders();
+  // Token travels as a form field (no Authorization header). multipart/form-data + POST +
+  // no custom headers = a "simple" CORS request, so no OPTIONS preflight (which ZGS eats).
+  const token = await _token();
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('access_token', token);
   const response = await fetch(`${BASE}/api/documents`, {
     method: 'POST',
-    headers,
     body: formData,
   });
   if (!response.ok) {
@@ -31,10 +33,13 @@ export async function listDocuments() {
 }
 
 export async function deleteDocument(documentId) {
-  const headers = await _authHeaders();
-  const response = await fetch(`${BASE}/api/documents/${documentId}`, {
-    method: 'DELETE',
-    headers,
+  // POST + text/plain body-token (not DELETE + header) — DELETE always preflights and the
+  // Authorization header would too; both are eaten by ZGS. Same pattern as /api/chat.
+  const token = await _token();
+  const response = await fetch(`${BASE}/api/documents/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ document_id: documentId, access_token: token }),
   });
   if (!response.ok) throw new Error('Delete failed');
   return response.json();

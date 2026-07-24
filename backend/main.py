@@ -24,7 +24,7 @@ if _missing:
 print("[KIRA STARTUP] All required env vars present — starting imports", flush=True)
 
 # --------------- standard imports ---------------
-from fastapi import FastAPI, Header, HTTPException, Depends, File, UploadFile, Request
+from fastapi import FastAPI, Header, HTTPException, Depends, File, UploadFile, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 import jwt as pyjwt
@@ -256,8 +256,24 @@ async def chat(request: Request):
 
         target_workspace = routing.get("workspace", current_workspace)
         action = routing.get("action", "stay")
-        entity = routing.get("entity") or current_entity
+        router_entity = routing.get("entity")
+        # Only inherit the previously-viewed suspect on an explicit follow-up ("stay",
+        # e.g. "show his cases"). A "navigate" means a new focus — if the router named a
+        # new entity use it; if it named none, use none. Never silently reuse the old
+        # suspect on navigate, which caused "tell me about Salim Khan" to return Mehta.
+        if router_entity:
+            entity = router_entity
+        elif action == "stay":
+            entity = current_entity
+        else:
+            entity = None
         confidence = routing.get("confidence", 0.9)
+        print(
+            f"[KIRA entity-trace] query={req.query!r} | session_current_entity={current_entity!r} "
+            f"| router_entity={router_entity!r} | router_workspace={routing.get('workspace')!r} "
+            f"| router_action={action!r} | FINAL_entity={entity!r} | target_ws={target_workspace!r}",
+            flush=True,
+        )
         detected_lang = routing.get("language", lang)
         if detected_lang == "kn":
             lang = "kn"
@@ -491,8 +507,13 @@ def network_analysis_endpoint():
 @app.post("/api/documents")
 async def upload_document(
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
+    access_token: str = Form(""),
 ):
+    # Auth via a form field, NOT the Authorization header. multipart/form-data + POST +
+    # no custom headers keeps this a "simple" CORS request, so the browser sends no OPTIONS
+    # preflight — the ZGS gateway intercepts preflights and never forwards them to the app.
+    # Same pattern as /api/chat. Verification is identical to header auth.
+    current_user = await verify_token(access_token)
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
     content = await file.read()
@@ -518,11 +539,20 @@ async def list_documents_endpoint():
     return {"documents": list_documents()}
 
 
-@app.delete("/api/documents/{document_id}")
-async def delete_document_endpoint(
-    document_id: str,
-    current_user: dict = Depends(get_current_user),
-):
+@app.post("/api/documents/delete")
+async def delete_document_endpoint(request: Request):
+    # POST (not DELETE) with the token in a text/plain JSON body. The DELETE *method* is not
+    # CORS-"simple" and always triggers an OPTIONS preflight that ZGS eats, so we use POST +
+    # body-token — the same preflight-free pattern as /api/chat and the upload endpoint.
+    raw = await request.body()
+    try:
+        data = json.loads(raw or b"{}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Malformed request body")
+    await verify_token(data.get("access_token", ""))
+    document_id = data.get("document_id")
+    if not document_id:
+        raise HTTPException(status_code=400, detail="Missing document_id")
     await asyncio.to_thread(delete_document_record, document_id)
     return {"deleted": document_id}
 
@@ -664,7 +694,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v21-chat-body-token", "ts": "2026-07-23-s"}
+    return {"version": "seed-v23-entity-trace+rag-cors", "ts": "2026-07-23-u"}
 
 
 @app.get("/health")
