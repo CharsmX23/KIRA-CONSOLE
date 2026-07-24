@@ -19,6 +19,15 @@ def _get_supabase() -> Client:
     return _supabase
 
 
+def get_supabase_client() -> Client:
+    """Public, lazy accessor for the shared Supabase client.
+
+    Agents import this and call it at use-time — never a module-level `supabase` variable,
+    which would eagerly create the client at import and can crash startup if a key is bad.
+    """
+    return _get_supabase()
+
+
 def get_suspect(name: str) -> dict | None:
     result = _get_supabase().table("suspects").select("*").ilike("name", f"%{name}%").limit(1).execute()
     return result.data[0] if result.data else None

@@ -1,17 +1,17 @@
 import networkx as nx
 import community as community_louvain
-from db.entities import supabase
+from db.entities import get_supabase_client
 
 
 def build_criminal_graph() -> nx.Graph:
     G = nx.Graph()
 
-    suspects = supabase.table("suspects").select("name").execute().data or []
+    suspects = get_supabase_client().table("suspects").select("name").execute().data or []
     for s in suspects:
         G.add_node(s["name"])
 
     # Edges from shared cases
-    suspect_cases = supabase.table("suspect_cases").select("*").execute().data or []
+    suspect_cases = get_supabase_client().table("suspect_cases").select("*").execute().data or []
     case_to_suspects: dict[str, list] = {}
     for row in suspect_cases:
         case_to_suspects.setdefault(row["case_id"], []).append(row["suspect_name"])
@@ -25,7 +25,7 @@ def build_criminal_graph() -> nx.Graph:
                     G.add_edge(names[i], names[j], weight=1)
 
     # Edges from shared evidence
-    evidence_suspects = supabase.table("evidence_suspects").select("*").execute().data or []
+    evidence_suspects = get_supabase_client().table("evidence_suspects").select("*").execute().data or []
     evidence_to_suspects: dict[str, list] = {}
     for row in evidence_suspects:
         evidence_to_suspects.setdefault(row["evidence_title"], []).append(row["suspect_name"])
@@ -39,7 +39,7 @@ def build_criminal_graph() -> nx.Graph:
                     G.add_edge(names[i], names[j], weight=1)
 
     # Edges from gang co-membership (weighted higher)
-    gang_members = supabase.table("gang_members").select("*").execute().data or []
+    gang_members = get_supabase_client().table("gang_members").select("*").execute().data or []
     cluster_to_names: dict[str, list] = {}
     for m in gang_members:
         cluster_to_names.setdefault(m["cluster"], []).append(m["name"])

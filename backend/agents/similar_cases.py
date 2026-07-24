@@ -1,6 +1,6 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from db.entities import supabase
+from db.entities import get_supabase_client
 
 # TF-IDF is the right choice at this data scale (~10-50 cases).
 # Stop words are intentionally NOT used: police domain terms like "linked",
@@ -27,7 +27,7 @@ def find_similar_cases(case_id: str, top_k: int = 3) -> list:
     Shared suspects between cases is the strongest similarity signal at this
     data scale, since two cases sharing a suspect almost always share context.
     """
-    all_cases = supabase.table("cases").select("*").execute().data or []
+    all_cases = get_supabase_client().table("cases").select("*").execute().data or []
     if len(all_cases) < 2:
         print(f"[similar_cases] Only {len(all_cases)} case(s) in DB — need at least 2")
         return []
@@ -38,7 +38,7 @@ def find_similar_cases(case_id: str, top_k: int = 3) -> list:
         return []
 
     # Fetch all suspect-case links in one query
-    junctions = supabase.table("suspect_cases").select("*").execute().data or []
+    junctions = get_supabase_client().table("suspect_cases").select("*").execute().data or []
     suspects_by_case: dict[str, list[str]] = {}
     for j in junctions:
         suspects_by_case.setdefault(j["case_id"], []).append(j["suspect_name"])

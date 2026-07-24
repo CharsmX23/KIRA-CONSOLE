@@ -1,5 +1,5 @@
 import networkx as nx
-from db.entities import supabase
+from db.entities import get_supabase_client
 
 
 def build_transaction_graph() -> nx.DiGraph:
@@ -9,7 +9,7 @@ def build_transaction_graph() -> nx.DiGraph:
     association graph in network_analysis.py).
     """
     G = nx.DiGraph()
-    transactions = supabase.table("transactions").select("*").execute().data or []
+    transactions = get_supabase_client().table("transactions").select("*").execute().data or []
     for tx in transactions:
         G.add_edge(
             tx["sender"], tx["receiver"],
@@ -89,7 +89,7 @@ def detect_layering_pattern(case_id: str) -> dict:
     Also returns the raw transaction list so the frontend can render the chain.
     """
     transactions = (
-        supabase.table("transactions")
+        get_supabase_client().table("transactions")
         .select("*")
         .eq("case_id", case_id)
         .order("transaction_date")

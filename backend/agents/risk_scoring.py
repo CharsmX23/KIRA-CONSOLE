@@ -1,4 +1,4 @@
-from db.entities import supabase
+from db.entities import get_supabase_client
 
 
 def compute_risk_score(suspect: dict, network_centrality: float = 0.0) -> dict:
@@ -56,7 +56,7 @@ def get_risk_score_for_suspect(name: str) -> dict:
     from agents.network_analysis import get_centrality_scores
 
     result = (
-        supabase.table("suspects")
+        get_supabase_client().table("suspects")
         .select("*")
         .ilike("name", f"%{name}%")
         .limit(1)
