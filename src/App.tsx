@@ -23,7 +23,7 @@ import { supabase, UserProfile } from './lib/supabase';
 // --------------- types ---------------
 type WorkspaceType = 'supervision' | 'suspect' | 'case' | 'evidence_review' | 'network' | 'trend' | 'arrests' | 'today_cases' | 'audit';
 
-interface ChatMessage { role: 'officer' | 'ai'; text: string; isVoice?: boolean; }
+interface ChatMessage { role: 'officer' | 'ai'; text: string; isVoice?: boolean; isPending?: boolean; }
 interface AgentStatus { name: string; status: 'pending' | 'running' | 'complete'; }
 interface MapAction { lat: number; lng: number; zoom: number; label?: string; }
 interface InvestigationProgress {
@@ -216,6 +216,22 @@ export default function App() {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setChat(prev => [...prev, { role: 'officer', text: query, isVoice }]);
     setInput('');
+
+    // Client-side waiting UX: after 8s with no narration show an interim "retrieving" state;
+    // after 20s escalate to a graceful "taking longer" message. Both are cleared the moment
+    // a real narration (or error) arrives. Purely cosmetic — the backend has its own timeouts.
+    let responded = false;
+    const showPending = (text: string) => {
+      setChat(prev => {
+        const hasPending = prev.some(m => m.isPending);
+        if (hasPending) return prev.map(m => (m.isPending ? { ...m, text } : m));
+        return [...prev, { role: 'ai' as const, text, isPending: true }];
+      });
+    };
+    const t8 = setTimeout(() => { if (!responded) showPending(t('chatRetrieving', lang)); }, 8000);
+    const t20 = setTimeout(() => { if (!responded) showPending(t('chatTakingLonger', lang)); }, 20000);
+    const clearPendingTimers = () => { responded = true; clearTimeout(t8); clearTimeout(t20); };
+
     sendChat(
       query,
       SESSION_ID,
@@ -239,7 +255,9 @@ export default function App() {
       },
       (text: string, responseLang?: string, mapAct?: MapAction | null) => {
         console.log('[KIRA step 15] Narration received — length:', text.length, '| lang:', responseLang);
-        setChat(prev => [...prev, { role: 'ai', text }]);
+        clearPendingTimers();
+        // Drop any interim "retrieving"/"taking longer" bubble, then show the real answer.
+        setChat(prev => [...prev.filter(m => !m.isPending), { role: 'ai', text }]);
         console.log('[KIRA step 16] Narration displayed in chat');
         if (isVoice) speakNarration(text, responseLang ?? lang);
         if (mapAct) setMapAction(mapAct);
@@ -248,7 +266,7 @@ export default function App() {
           setTimeout(() => setShowAgentList(false), 2000);
         }
       },
-      (_sessionId: string) => {},
+      (_sessionId: string) => { clearPendingTimers(); },
     );
   }, [lang, runInvestigationReplay, speakNarration]);
 

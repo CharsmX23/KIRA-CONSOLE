@@ -144,6 +144,10 @@ export async function sendChat(query, sessionId, lang, onSignal, onNarration, on
 
   } catch (err) {
     console.error('[KIRA chat] Unexpected error during fetch/stream:', err);
-    onNarration('Connection error. Please try again.', lang, null);
+    // Graceful wording instead of a raw "Connection error" (which reads as broken).
+    const msg = lang === 'kn'
+      ? 'KIRA ಪ್ರತಿಕ್ರಿಯಿಸಲು ಎಂದಿನಂತೆ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ. ದಯವಿಟ್ಟು ಕ್ಷಣದಲ್ಲಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.'
+      : 'KIRA is taking longer than usual to respond. Please try again in a moment.';
+    onNarration(msg, lang, null);
   }
 }
