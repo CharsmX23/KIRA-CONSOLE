@@ -309,40 +309,56 @@ async def chat(request: Request):
         }
         yield f"data: {json.dumps(signal_event)}\n\n"
 
-        # Entity data enrichment must never break the chat stream. If the Catalyst/Supabase
-        # lookup fails, the AI still answers from the query + history alone.
+        # Entity data enrichment must never break the chat stream. Each blocking call is
+        # wrapped in asyncio.wait_for so a hung Supabase/Catalyst/Gemini/Cerebras call raises
+        # TimeoutError at the asyncio level — a HARD deadline that does not depend on any SDK
+        # honouring its own timeout param (SDK timeouts proved ineffective; the request went
+        # silent after entity-trace with no timeout ever firing). On timeout the stream still
+        # answers from whatever context succeeded.
         try:
-            entity_data = await asyncio.to_thread(get_entity_data, target_workspace, entity, inbound_headers)
+            entity_data = await asyncio.wait_for(
+                asyncio.to_thread(get_entity_data, target_workspace, entity, inbound_headers),
+                timeout=15,
+            )
         except Exception as ed_err:
-            print(f"[KIRA] get_entity_data failed ({target_workspace}/{entity}): {ed_err}", flush=True)
+            print(f"[KIRA] get_entity_data failed/timed out ({target_workspace}/{entity}): {type(ed_err).__name__} {ed_err}", flush=True)
             entity_data = None
 
         try:
-            history = await asyncio.to_thread(get_history, session_id, 8)
+            history = await asyncio.wait_for(
+                asyncio.to_thread(get_history, session_id, 8),
+                timeout=8,
+            )
         except Exception as h_err:
-            print(f"[KIRA] get_history failed: {h_err}", flush=True)
+            print(f"[KIRA] get_history failed/timed out: {type(h_err).__name__} {h_err}", flush=True)
             history = []
 
         rag_context: list[str] = []
         try:
             from agents.rag import retrieve_context
-            rag_context = await asyncio.to_thread(retrieve_context, req.query)
+            rag_context = await asyncio.wait_for(
+                asyncio.to_thread(retrieve_context, req.query),
+                timeout=10,
+            )
         except Exception as rag_err:
-            print(f"[RAG] Retrieval skipped: {rag_err}")
+            print(f"[RAG] Retrieval skipped/timed out: {type(rag_err).__name__} {rag_err}", flush=True)
 
         try:
-            narration = await asyncio.to_thread(
-                generate_response,
-                req.query,
-                target_workspace,
-                entity,
-                entity_data,
-                history,
-                lang,
-                rag_context,
+            narration = await asyncio.wait_for(
+                asyncio.to_thread(
+                    generate_response,
+                    req.query,
+                    target_workspace,
+                    entity,
+                    entity_data,
+                    history,
+                    lang,
+                    rag_context,
+                ),
+                timeout=22,
             )
         except Exception as gen_err:
-            print(f"[KIRA] generate_response failed: {gen_err}", flush=True)
+            print(f"[KIRA] generate_response failed/timed out: {type(gen_err).__name__} {gen_err}", flush=True)
             narration = (
                 "ಕ್ಷಮಿಸಿ, ಪ್ರತಿಕ್ರಿಯೆ ರಚಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
                 if lang == "kn"
@@ -694,7 +710,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v26-entity-anchor", "ts": "2026-07-25-a"}
+    return {"version": "seed-v27-hard-timeouts", "ts": "2026-07-25-b"}
 
 
 @app.get("/health")
