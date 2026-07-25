@@ -89,6 +89,28 @@ def extract_map_action(query: str) -> dict | None:
     return None
 
 
+# Deterministic suspect-name safety net. The LLM router reliably handles full names
+# ("salim khan") but misses informal forms ("S.khan", "s.khan"). If the query clearly
+# contains a known suspect surname, force the suspect route so entity resolution and the
+# (token-matched) data lookup actually run instead of falling back to a generic answer.
+# Canonical names are chosen so both Catalyst (full-name ilike) and Supabase (last-name
+# token) lookups resolve the same person.
+_KNOWN_SUSPECTS = [
+    ("khan", "Salim Khan"),
+    ("mehta", "Rajesh Kumar Mehta"),
+    ("nair", "Dev Nair"),
+    ("reddy", "P. Reddy"),
+]
+
+
+def detect_known_suspect(query: str) -> str | None:
+    q = query.lower()
+    for surname, canonical in _KNOWN_SUSPECTS:
+        if surname in q:
+            return canonical
+    return None
+
+
 # --------------- auth dependency ---------------
 
 async def get_current_user(authorization: str = Header(None)) -> dict:
@@ -267,6 +289,15 @@ async def chat(request: Request):
             entity = current_entity
         else:
             entity = None
+
+        # Safety net: if the query clearly names a known suspect but the LLM router missed it
+        # (e.g. "about S.khan" → supervision/None), force the suspect route deterministically.
+        forced_suspect = detect_known_suspect(req.query)
+        if forced_suspect and officer_role != "policymaker":
+            entity = forced_suspect
+            target_workspace = "suspect"
+            action = "navigate"
+
         confidence = routing.get("confidence", 0.9)
         print(
             f"[KIRA entity-trace] query={req.query!r} | session_current_entity={current_entity!r} "
@@ -710,7 +741,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v28-name-token-match", "ts": "2026-07-25-c"}
+    return {"version": "seed-v29-suspect-detect", "ts": "2026-07-25-d"}
 
 
 @app.get("/health")
