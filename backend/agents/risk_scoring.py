@@ -1,4 +1,4 @@
-from db.entities import get_supabase_client
+from db.entities import get_supabase_client, _match_token
 
 
 def compute_risk_score(suspect: dict, network_centrality: float = 0.0) -> dict:
@@ -55,15 +55,24 @@ def compute_risk_score(suspect: dict, network_centrality: float = 0.0) -> dict:
 def get_risk_score_for_suspect(name: str) -> dict:
     from agents.network_analysis import get_centrality_scores
 
+    token = _match_token(name)
     result = (
         get_supabase_client().table("suspects")
         .select("*")
-        .ilike("name", f"%{name}%")
+        .ilike("name", f"%{token}%")
         .limit(1)
         .execute()
     )
     if not result.data:
-        print(f"[risk_scoring] No suspect found for name={name!r}")
+        result = (
+            get_supabase_client().table("suspects")
+            .select("*")
+            .ilike("full_name", f"%{token}%")
+            .limit(1)
+            .execute()
+        )
+    if not result.data:
+        print(f"[risk_scoring] No suspect found for name={name!r} (token={token!r})")
         return {}
     suspect = result.data[0]
 

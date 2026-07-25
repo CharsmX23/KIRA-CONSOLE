@@ -710,7 +710,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v27-hard-timeouts", "ts": "2026-07-25-b"}
+    return {"version": "seed-v28-name-token-match", "ts": "2026-07-25-c"}
 
 
 @app.get("/health")

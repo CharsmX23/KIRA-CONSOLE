@@ -259,7 +259,9 @@ export default function App() {
         // Drop any interim "retrieving"/"taking longer" bubble, then show the real answer.
         setChat(prev => [...prev.filter(m => !m.isPending), { role: 'ai', text }]);
         console.log('[KIRA step 16] Narration displayed in chat');
-        if (isVoice) speakNarration(text, responseLang ?? lang);
+        // Speak every answer unless muted (speakNarration self-gates on isMuted). Enables
+        // TTS for typed queries too, not just voice-initiated ones. Toggle with the mute button.
+        speakNarration(text, responseLang ?? lang);
         if (mapAct) setMapAction(mapAct);
         if (lastSignalWorkspace.current !== 'suspect') {
           setActiveAgents(prev => prev.map(a => ({ ...a, status: 'complete' as const })));

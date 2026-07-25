@@ -28,8 +28,24 @@ def get_supabase_client() -> Client:
     return _get_supabase()
 
 
+def _match_token(name: str) -> str:
+    """Return the stable last-name token for cross-source name matching.
+
+    Catalyst/router produce full names ("Salim Khan"); the Supabase mock stores abbreviated
+    names ("S. Khan"). The last-name token ("Khan") is common to both, so matching on it
+    resolves the same person regardless of naming style. Safe for this dataset (no two
+    suspects share a surname).
+    """
+    parts = [p for p in (name or "").replace(".", " ").split() if p]
+    return parts[-1] if parts else (name or "")
+
+
 def get_suspect(name: str) -> dict | None:
-    result = _get_supabase().table("suspects").select("*").ilike("name", f"%{name}%").limit(1).execute()
+    token = _match_token(name)
+    result = _get_supabase().table("suspects").select("*").ilike("name", f"%{token}%").limit(1).execute()
+    if not result.data:
+        # fall back to full_name (stores "Salim Khan") in case the token is a first name
+        result = _get_supabase().table("suspects").select("*").ilike("full_name", f"%{token}%").limit(1).execute()
     return result.data[0] if result.data else None
 
 
@@ -48,7 +64,7 @@ def get_suspect_evidence(name: str) -> list:
     junctions = (
         _get_supabase().table("evidence_suspects")
         .select("evidence_title")
-        .eq("suspect_name", name)
+        .ilike("suspect_name", f"%{_match_token(name)}%")
         .execute()
     )
     if not junctions.data:
@@ -186,9 +202,12 @@ def get_entity_data(workspace: str, entity: str | None, inbound_headers: dict | 
 
     if workspace == "suspect":
         if inbound_headers is not None:
-            suspect = get_suspect_from_catalyst(entity, inbound_headers)
-            if not suspect:
+            catalyst_suspect = get_suspect_from_catalyst(entity, inbound_headers)
+            profile = get_suspect(entity)  # rich Supabase profile (role, status, crimes, cluster)
+            if not catalyst_suspect and not profile:
                 return None
+            # Merge: rich Supabase profile as the base, Catalyst identity fields on top.
+            suspect = {**(profile or {}), **(catalyst_suspect or {})}
             from agents.risk_scoring import get_risk_score_for_suspect
             return {
                 "suspect": suspect,
