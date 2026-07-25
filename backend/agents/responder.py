@@ -75,6 +75,21 @@ def generate_response(
     if entity_data:
         entity_context = f"\nCurrent entity data: {entity_data}"
 
+    # Entity anchor: shared case briefs often name a co-accused (e.g. case KS1207's brief
+    # centres on R. Mehta), so when asked about a different person in the same case the model
+    # can drift onto that name. Pin the answer's subject to the queried entity, while still
+    # allowing accurate references to related parties.
+    entity_anchor = ""
+    if entity:
+        entity_anchor = (
+            f"\n\n[GROUNDING CONSTRAINT — SUBJECT]"
+            f"\nThe officer is asking specifically about '{entity}'. Center your answer on"
+            f" '{entity}' — their role, records, and status. Other individuals named in shared"
+            f" case briefs or evidence are related parties/context: you may reference them"
+            f" accurately when relevant (e.g. as co-accused in the same case), but do NOT"
+            f" answer as though the query were about them. The subject is '{entity}'."
+        )
+
     # Strict grounding: when a computed risk score is present, inject its exact
     # values as an explicit constraint the model cannot overlook or rephrase.
     # This prevents the model from hallucinating plausible-sounding scores.
@@ -127,7 +142,7 @@ def generate_response(
             f"Reference this context when relevant to the query."
         )
 
-    system_content = RESPONDER_SYSTEM + entity_context + grounding + financial_grounding + rag_section + lang_instruction
+    system_content = RESPONDER_SYSTEM + entity_context + entity_anchor + grounding + financial_grounding + rag_section + lang_instruction
 
     messages = [{"role": "system", "content": system_content}]
 
