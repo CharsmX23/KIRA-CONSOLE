@@ -374,6 +374,21 @@ async def chat(request: Request):
         except Exception as rag_err:
             print(f"[RAG] Retrieval skipped/timed out: {type(rag_err).__name__} {rag_err}", flush=True)
 
+        # [DATA-TRACE] Dump the exact context handed to the LLM, so we can see precisely which
+        # field carries "Mehta" for a Khan query (suspect profile vs cases/BriefFacts vs RAG vs
+        # history). Instrumentation only — no behaviour change.
+        try:
+            _sus = (entity_data or {}).get("suspect") if isinstance(entity_data, dict) else None
+            _cases = (entity_data or {}).get("cases") if isinstance(entity_data, dict) else None
+            print(f"[KIRA data-trace] entity={entity!r}", flush=True)
+            print(f"[KIRA data-trace] suspect={json.dumps(_sus, default=str)[:600]}", flush=True)
+            print(f"[KIRA data-trace] cases={json.dumps(_cases, default=str)[:900]}", flush=True)
+            print(f"[KIRA data-trace] evidence/risk={json.dumps({'evidence': (entity_data or {}).get('evidence'), 'computed_risk': (entity_data or {}).get('computed_risk')}, default=str)[:600]}", flush=True)
+            print(f"[KIRA data-trace] rag_context={json.dumps(rag_context, default=str)[:600]}", flush=True)
+            print(f"[KIRA data-trace] history_last2={json.dumps(history[-2:] if history else [], default=str)[:600]}", flush=True)
+        except Exception as trace_err:
+            print(f"[KIRA data-trace] dump failed: {trace_err}", flush=True)
+
         try:
             narration = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -741,7 +756,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v29-suspect-detect", "ts": "2026-07-25-d"}
+    return {"version": "seed-v30-data-trace", "ts": "2026-07-25-e"}
 
 
 @app.get("/health")
