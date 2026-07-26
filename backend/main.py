@@ -756,7 +756,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v30-data-trace", "ts": "2026-07-25-e"}
+    return {"version": "seed-v31-full-trace", "ts": "2026-07-25-f"}
 
 
 @app.get("/health")

@@ -155,6 +155,10 @@ def generate_response(
         "content": f"Workspace: {workspace}\nEntity: {entity or 'none'}\nQuery: {query}",
     })
 
+    # [PROMPT-TRACE] Exact system prompt sent to Cerebras — shows whether the entity_data,
+    # entity-anchor, or RESPONDER_SYSTEM itself carries "Mehta" for a Khan query.
+    print(f"[KIRA prompt-trace] entity={entity!r} system_content=\n{system_content[:2200]}", flush=True)
+
     try:
         response = _get_client().chat.completions.create(
             model="gpt-oss-120b",
