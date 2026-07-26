@@ -255,26 +255,54 @@ async def chat(request: Request):
         # AppSail's proxy drops silent connections; this heartbeat keeps it alive.
         yield f"data: {json.dumps({'event': 'heartbeat'})}\n\n"
 
-        session = await asyncio.to_thread(get_or_create_session, session_id, req.lang)
+        # These pre-routing calls (Supabase session/context/save + Cerebras router + language
+        # detect) were previously UNBOUNDED — a hang here freezes the whole stream before the
+        # entity-trace line ever prints (no trace = hang is here). Each now has a hard
+        # asyncio.wait_for deadline with a safe fallback, same discipline as the calls below.
+        try:
+            session = await asyncio.wait_for(
+                asyncio.to_thread(get_or_create_session, session_id, req.lang), timeout=8
+            )
+        except Exception as e:
+            print(f"[KIRA] get_or_create_session failed/timed out: {type(e).__name__} {e}", flush=True)
+            session = {}
         current_workspace = session.get("current_workspace", "supervision")
         current_entity = session.get("current_entity")
 
         lang = req.lang
         if lang == "en":
-            detected = await detect_language(req.query)
-            if detected == "kn":
-                lang = "kn"
+            try:
+                detected = await asyncio.wait_for(detect_language(req.query), timeout=6)
+                if detected == "kn":
+                    lang = "kn"
+            except Exception as e:
+                print(f"[KIRA] detect_language failed/timed out: {type(e).__name__} {e}", flush=True)
 
-        context_string = await asyncio.to_thread(get_recent_context_string, session_id)
-        await asyncio.to_thread(save_message, session_id, "officer", req.query, user_id)
+        try:
+            context_string = await asyncio.wait_for(
+                asyncio.to_thread(get_recent_context_string, session_id), timeout=8
+            )
+        except Exception as e:
+            print(f"[KIRA] get_recent_context_string failed/timed out: {type(e).__name__} {e}", flush=True)
+            context_string = ""
 
-        routing = await asyncio.to_thread(
-            classify_intent,
-            req.query,
-            current_workspace,
-            current_entity,
-            context_string,
-        )
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(save_message, session_id, "officer", req.query, user_id), timeout=8
+            )
+        except Exception as e:
+            print(f"[KIRA] save_message(officer) failed/timed out: {type(e).__name__} {e}", flush=True)
+
+        try:
+            routing = await asyncio.wait_for(
+                asyncio.to_thread(
+                    classify_intent, req.query, current_workspace, current_entity, context_string
+                ),
+                timeout=15,
+            )
+        except Exception as e:
+            print(f"[KIRA] classify_intent failed/timed out: {type(e).__name__} {e} — using safe default routing", flush=True)
+            routing = {"workspace": current_workspace, "action": "stay", "entity": None, "confidence": 0.5, "language": lang}
 
         target_workspace = routing.get("workspace", current_workspace)
         action = routing.get("action", "stay")
@@ -756,7 +784,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v31-full-trace", "ts": "2026-07-25-f"}
+    return {"version": "seed-v32-preroute-timeouts", "ts": "2026-07-25-g"}
 
 
 @app.get("/health")
