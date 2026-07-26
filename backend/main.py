@@ -392,15 +392,21 @@ async def chat(request: Request):
             print(f"[KIRA] get_history failed/timed out: {type(h_err).__name__} {h_err}", flush=True)
             history = []
 
+        # RAG only helps when grounding against a specific subject/case. For casual chat and
+        # generic supervision queries (no entity), skip the Gemini embed entirely — it added
+        # pointless latency to messages like "how are you" that have nothing to retrieve.
         rag_context: list[str] = []
-        try:
-            from agents.rag import retrieve_context
-            rag_context = await asyncio.wait_for(
-                asyncio.to_thread(retrieve_context, req.query),
-                timeout=10,
-            )
-        except Exception as rag_err:
-            print(f"[RAG] Retrieval skipped/timed out: {type(rag_err).__name__} {rag_err}", flush=True)
+        if entity is not None:
+            try:
+                from agents.rag import retrieve_context
+                rag_context = await asyncio.wait_for(
+                    asyncio.to_thread(retrieve_context, req.query),
+                    timeout=10,
+                )
+            except Exception as rag_err:
+                print(f"[RAG] Retrieval skipped/timed out: {type(rag_err).__name__} {rag_err}", flush=True)
+        else:
+            print("[RAG] skipped — no entity (casual/general query)", flush=True)
 
         # [DATA-TRACE] Dump the exact context handed to the LLM, so we can see precisely which
         # field carries "Mehta" for a Khan query (suspect profile vs cases/BriefFacts vs RAG vs
@@ -784,7 +790,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v32-preroute-timeouts", "ts": "2026-07-25-g"}
+    return {"version": "seed-v33-conversational", "ts": "2026-07-25-h"}
 
 
 @app.get("/health")

@@ -495,20 +495,22 @@ export function RightPanel({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             <button
               onClick={onVoice}
-              disabled={!browserSupportsSpeechRecognition}
+              /* Always clickable: onVoice surfaces a clear toast if the browser is unsupported
+                 or mic permission is denied. A disabled, greyed-out button gave the user no
+                 feedback at all ("can't even enable it"). */
               className={listening ? 'mic-listening' : undefined}
               style={{
                 width: 48, height: 48,
                 borderRadius: '50%',
                 background: listening ? 'rgba(240, 78, 78, 0.15)' : 'var(--bg-raised, #243447)',
                 border: listening ? '1px solid rgba(240, 78, 78, 0.5)' : '1px solid var(--border-default, #4A5C70)',
-                cursor: browserSupportsSpeechRecognition ? 'pointer' : 'not-allowed',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
                 transition: 'background 0.2s, border-color 0.2s',
-                opacity: browserSupportsSpeechRecognition ? 1 : 0.4,
+                opacity: browserSupportsSpeechRecognition ? 1 : 0.6,
               }}
             >
               <Mic size={18} color={listening ? '#F04E4E' : 'var(--accent-blue, #4D9EF5)'} />
