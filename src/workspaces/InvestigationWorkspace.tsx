@@ -2,10 +2,25 @@ import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Camera, Car, Smartphone, Landmark, UserCheck, TrendingUp,
-  Zap, Shield, Users, MapPin
+  Zap, Shield, Users, MapPin, UserRound
 } from 'lucide-react';
-import { Avatar } from '../components/Avatar';
 import { Lang, t } from '../i18n/translations';
+
+// Neutral profile silhouette (no face/photo) — like a default social-media avatar.
+function ProfileSilhouette({ size, square = false, ring }: { size: number; square?: boolean; ring?: string }) {
+  return (
+    <div style={{
+      width: size, height: size,
+      borderRadius: square ? Math.round(size * 0.06) : '50%',
+      background: '#0F151E',
+      border: ring ? `2px solid ${ring}` : '1px solid #243447',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      overflow: 'hidden', flexShrink: 0,
+    }}>
+      <UserRound size={size * 0.72} color="#3A4A5E" fill="#2A3646" strokeWidth={1.2} style={{ marginBottom: -size * 0.08 }} />
+    </div>
+  );
+}
 import { EVIDENCE, EC, GANG_MEMBERS, OFFENDER_FOOTPRINT } from '../data';
 
 interface InvestigationProgress {
@@ -250,7 +265,7 @@ export function InvestigationWorkspace({
 
             {/* LEFT — Photo column */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <Avatar name={dossier.avatar} size={220} riskRing={dossier.status} square />
+              <ProfileSilhouette size={220} square ring={dossier.status} />
               {/* Status dot */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div className="glow-pulse-red" style={{ width: 9, height: 9, borderRadius: '50%', background: dossier.status }} />
@@ -533,7 +548,7 @@ export function InvestigationWorkspace({
                       background: '#DC2626', border: '2px solid #7f1d1d',
                       zIndex: 1,
                     }} />
-                    <Avatar name={dossier.avatar} size={56} riskRing={dossier.status} />
+                    <ProfileSilhouette size={56} ring={dossier.status} />
                     <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#FCA5A5', marginTop: 8 }}>{dossier.name.toUpperCase()}</div>
                     <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', marginTop: 3 }}>SUSPECT</div>
                   </div>
@@ -690,7 +705,7 @@ function GangCard({ member, size, onClick, lang }: {
           padding: '1px 5px', borderRadius: '0 0 3px 3px', letterSpacing: '0.05em',
         }}>{lang === 'kn' ? 'ಗುರಿ' : 'TARGET'}</div>
       )}
-      <Avatar name={member.name} size={size} riskRing={member.ring} square />
+      <ProfileSilhouette size={size} square ring={member.ring} />
       <div style={{ fontSize: 11, fontWeight: 600, color: '#E8EDF2', textAlign: 'center' }}>{member.name}</div>
       <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B' }}>{member.role}</div>
       <div style={{

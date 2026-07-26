@@ -110,6 +110,7 @@ export const T = {
   inputPlaceholder: { en: 'Ask anything about a suspect, case, or crime pattern...', kn: 'ಶಂಕಿತ, ಪ್ರಕರಣ ಅಥವಾ ಅಪರಾಧ ಮಾದರಿಯ ಬಗ್ಗೆ ಏನಾದರೂ ಕೇಳಿ...' },
   readyToAssist: { en: 'Ready to assist. Ask about a suspect, case, or crime pattern.', kn: 'ಸಹಾಯಕ್ಕೆ ಸಿದ್ಧ. ಶಂಕಿತ, ಪ್ರಕರಣ ಅಥವಾ ಅಪರಾಧ ಮಾದರಿಯ ಬಗ್ಗೆ ಕೇಳಿ.' },
   chatRetrieving: { en: 'Retrieving intelligence data…', kn: 'ಗುಪ್ತಚರ ಮಾಹಿತಿ ಹಿಂಪಡೆಯಲಾಗುತ್ತಿದೆ…' },
+  fetchingDetails: { en: 'Fetching details about', kn: 'ವಿವರಗಳನ್ನು ಪಡೆಯಲಾಗುತ್ತಿದೆ:' },
   chatTakingLonger: { en: 'KIRA is taking longer than usual to respond. Please try rephrasing your question or try again in a moment.', kn: 'KIRA ಪ್ರತಿಕ್ರಿಯಿಸಲು ಎಂದಿನಂತೆ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಪುನಃ ರೂಪಿಸಿ ಅಥವಾ ಕ್ಷಣದಲ್ಲಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.' },
   analyze: { en: 'Analyze', kn: 'ವಿಶ್ಲೇಷಿಸಿ' },
   voice: { en: 'Voice', kn: 'ಧ್ವನಿ' },

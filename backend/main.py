@@ -111,6 +111,35 @@ def detect_known_suspect(query: str) -> str | None:
     return None
 
 
+# Hotspot/location queries must land on the supervision map — the LLM router sometimes
+# misroutes "whitefield hotspots" to arrests.
+def is_hotspot_query(query: str) -> bool:
+    q = query.lower()
+    if "hotspot" in q:
+        return True
+    return any(kw in q for kw in ("show", "map", "where", "zoom", "focus")) and any(
+        loc in q for loc in _LOCATION_MAP
+    )
+
+
+# Casual conversation → answer directly, no investigation agents / no dossier animation.
+_CASUAL_EXACT = {
+    "hi", "hii", "hey", "yo", "hello", "ok", "okay", "test", "thanks", "thank you",
+    "how are you", "how r u", "how are u", "how're you", "is this kira", "who are you",
+    "who r u", "what can you do", "what do you do", "good morning", "good evening",
+    "good afternoon", "are you there", "hi kira", "hello kira",
+}
+_CASUAL_PREFIX = (
+    "hi ", "hii ", "hey ", "hello ", "how are", "how r", "how're", "is this kira",
+    "who are you", "who r u", "good morning", "good evening", "good afternoon", "thank",
+)
+
+
+def is_casual_query(query: str) -> bool:
+    q = query.lower().strip().rstrip("?!. ")
+    return q in _CASUAL_EXACT or q.startswith(_CASUAL_PREFIX)
+
+
 # --------------- auth dependency ---------------
 
 async def get_current_user(authorization: str = Header(None)) -> dict:
@@ -326,6 +355,18 @@ async def chat(request: Request):
             target_workspace = "suspect"
             action = "navigate"
 
+        # Hotspot/location queries → supervision map (LLM sometimes sends them to arrests).
+        elif is_hotspot_query(req.query):
+            target_workspace = "supervision"
+            entity = None
+            action = "navigate"
+
+        # Casual conversation → no entity, and (below) no agents/animation.
+        casual = (not forced_suspect) and entity is None and is_casual_query(req.query)
+        if casual:
+            target_workspace = "supervision"
+            action = "stay"
+
         confidence = routing.get("confidence", 0.9)
         print(
             f"[KIRA entity-trace] query={req.query!r} | session_current_entity={current_entity!r} "
@@ -337,7 +378,8 @@ async def chat(request: Request):
         if detected_lang == "kn":
             lang = "kn"
 
-        agents_running = AGENT_SETS.get(target_workspace, [])
+        # Casual chat shows no investigation agents; real queries do.
+        agents_running = [] if casual else AGENT_SETS.get(target_workspace, [])
 
         # Policymaker restriction: block individual suspect queries
         if officer_role == "policymaker" and target_workspace == "suspect":
@@ -790,7 +832,7 @@ async def suspect_cases_catalyst(request: Request, name: str = "Mehta"):
 
 @app.get("/api/version-check")
 def version_check():
-    return {"version": "seed-v33-conversational", "ts": "2026-07-25-h"}
+    return {"version": "seed-v34-routing-speed-casual", "ts": "2026-07-25-i"}
 
 
 @app.get("/health")

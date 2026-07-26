@@ -141,7 +141,6 @@ export default function App() {
     listening,
     resetTranscript,
     browserSupportsSpeechRecognition,
-    isMicrophoneAvailable,
   } = useSpeechRecognition();
 
   const pendingVoiceQuery = useRef<string | null>(null);
@@ -245,13 +244,17 @@ export default function App() {
         if (signal.entity) {
           setSubjectName(signal.entity);
           if (ws === 'case') setCaseId(signal.entity);
+          // Immediate acknowledgement while the dossier/answer loads.
+          showPending(`${t('fetchingDetails', lang)} ${signal.entity}…`);
         }
         if (ws === 'suspect') {
           setIsVoice(isVoice);
           runInvestigationReplay(isVoice, true);
         } else {
-          setActiveAgents((signal.agentsRunning ?? []).map((name: string) => ({ name, status: 'running' as const })));
-          setShowAgentList(true);
+          const agents = (signal.agentsRunning ?? []).map((name: string) => ({ name, status: 'running' as const }));
+          setActiveAgents(agents);
+          // No agent panel for casual/conversational replies (backend sends empty agents).
+          setShowAgentList(agents.length > 0);
         }
       },
       (text: string, responseLang?: string, mapAct?: MapAction | null) => {
@@ -289,44 +292,67 @@ export default function App() {
       const q = finalTranscript.trim();
       setVoiceState('idle');
       if (q) submitQuery(q, true);
-    } else {
+      return;
+    }
+
+    // Wire runtime errors from the underlying recognition (denial, no-speech, network) so
+    // they don't fail silently.
+    try {
+      const rec = SpeechRecognition.getRecognition?.();
+      if (rec) {
+        rec.onerror = (e: { error?: string }) => {
+          setVoiceState('idle');
+          const err = e?.error;
+          if (err === 'not-allowed' || err === 'service-not-allowed') {
+            showToast('Microphone access denied. Click the 🔒/camera icon in the address bar → allow Microphone → reload.');
+          } else if (err === 'no-speech') {
+            showToast('No speech detected — tap the mic and speak clearly.');
+          } else if (err && err !== 'aborted') {
+            showToast(`Voice input error: ${err}. Please try again.`);
+          }
+        };
+      }
+    } catch { /* getRecognition unavailable — the catches below still guard */ }
+
+    // Explicitly request mic permission first. react-speech-recognition's startListening does
+    // NOT reliably trigger the browser permission prompt on its own — getUserMedia does, and
+    // it surfaces a clear reason if the mic is blocked/unavailable.
+    const startRecognition = () => {
       resetTranscript();
       pendingVoiceQuery.current = null;
       setVoiceState('listening');
-      // Surface runtime errors from the underlying recognition (permission denial, no-speech,
-      // network) — otherwise they fail completely silently.
-      try {
-        const rec = SpeechRecognition.getRecognition?.();
-        if (rec) {
-          rec.onerror = (e: { error?: string }) => {
-            setVoiceState('idle');
-            const err = e?.error;
-            if (err === 'not-allowed' || err === 'service-not-allowed') {
-              showToast('Microphone access denied. Enable mic permission in the browser address bar and retry.');
-            } else if (err === 'no-speech') {
-              showToast('No speech detected. Tap the mic and speak.');
-            } else if (err) {
-              showToast(`Voice input error: ${err}. Please try again.`);
-            }
-          };
-        }
-      } catch { /* getRecognition unavailable — startListening's catch below still guards */ }
-      // startListening returns a Promise; an uncaught rejection (denied permission, or a
-      // double-start InvalidStateError) was previously swallowed silently.
       Promise.resolve(SpeechRecognition.startListening({
         continuous: false,
         language: lang === 'kn' ? 'kn-IN' : 'en-IN',
       })).catch((err: unknown) => {
         setVoiceState('idle');
         console.error('[KIRA voice] startListening failed:', err);
-        showToast(
-          isMicrophoneAvailable === false
-            ? 'Microphone unavailable or permission denied. Check browser mic settings.'
-            : 'Could not start voice input. Please try again.'
-        );
+        showToast('Could not start voice input. Please try again.');
       });
+    };
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach(t => t.stop()); // release; recognition opens its own
+          startRecognition();
+        })
+        .catch((err: unknown) => {
+          setVoiceState('idle');
+          const name = (err as { name?: string })?.name;
+          if (name === 'NotAllowedError' || name === 'SecurityError') {
+            showToast('Microphone blocked. Click the camera/🔒 icon in the address bar → allow Microphone → reload.');
+          } else if (name === 'NotFoundError') {
+            showToast('No microphone found. Connect a mic and try again.');
+          } else {
+            showToast('Could not access the microphone. Check browser mic permissions.');
+          }
+        });
+    } else {
+      // Older browser without mediaDevices — fall back to direct start.
+      startRecognition();
     }
-  }, [listening, finalTranscript, lang, resetTranscript, browserSupportsSpeechRecognition, isMicrophoneAvailable, submitQuery, showToast]);
+  }, [listening, finalTranscript, lang, resetTranscript, browserSupportsSpeechRecognition, submitQuery, showToast]);
 
   useEffect(() => {
     if (!listening && voiceState === 'listening') {

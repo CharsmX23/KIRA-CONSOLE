@@ -81,6 +81,10 @@ def detect_communities() -> dict:
     }
 
 
+_centrality_cache: dict[str, float] | None = None
+_centrality_cache_ts: float = 0.0
+
+
 def get_centrality_scores() -> dict[str, float]:
     """
     Weighted degree centrality: sum of edge weights per node, normalized to [0, 1].
@@ -93,6 +97,13 @@ def get_centrality_scores() -> dict[str, float]:
     Weighted degree correctly measures total connection strength: a suspect who
     appears in more shared cases and evidence items scores higher.
     """
+    # Cache the graph computation (4 Supabase reads + networkx) for 5 min — it was recomputed
+    # on EVERY suspect query, which was the main reason "tell me about <suspect>" was slow.
+    global _centrality_cache, _centrality_cache_ts
+    import time
+    if _centrality_cache is not None and (time.time() - _centrality_cache_ts) < 300:
+        return _centrality_cache
+
     G = build_criminal_graph()
     if G.number_of_nodes() == 0:
         return {}
@@ -100,11 +111,11 @@ def get_centrality_scores() -> dict[str, float]:
     weighted_degrees = dict(G.degree(weight="weight"))
     max_degree = max(weighted_degrees.values()) if weighted_degrees else 1
 
-    print(f"[network_analysis] weighted_degrees: {weighted_degrees}")
-    print(f"[network_analysis] max_degree: {max_degree}")
-
     centrality = {
         name: round(deg / max_degree, 3)
         for name, deg in weighted_degrees.items()
     }
-    return dict(sorted(centrality.items(), key=lambda x: -x[1]))
+    result = dict(sorted(centrality.items(), key=lambda x: -x[1]))
+    _centrality_cache = result
+    _centrality_cache_ts = time.time()
+    return result
