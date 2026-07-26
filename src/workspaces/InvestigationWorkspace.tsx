@@ -38,6 +38,9 @@ interface Dossier {
   mugshotId: string; photoDates: string;
   bio: { label: string; value: string; color: string }[];
   stats: { key: string; label: string; value: string; color: string; sub: string }[];
+  physical: { label: string; value: string }[];
+  lastSeenLoc: string; lastSeenTime: string;
+  detentionMain: string; detentionRight: string; detentionNote: string;
 }
 
 const SUSPECT_DOSSIERS: Record<string, Dossier> = {
@@ -65,6 +68,18 @@ const SUSPECT_DOSSIERS: Record<string, Dossier> = {
       { key: 'sims', label: 'PHONE SIMs', value: '3', color: '#06B6D4', sub: 'Multiple IDs' },
       { key: 'threat', label: 'THREAT SCORE', value: '91', color: 'var(--risk-high, #F04E4E)', sub: 'out of 100' },
     ],
+    physical: [
+      { label: 'BUILD', value: 'Medium' },
+      { label: 'COMPLEXION', value: 'Fair' },
+      { label: 'HAIR', value: 'Black, short' },
+      { label: 'EYES', value: 'Brown' },
+      { label: 'MARKS', value: 'Scar — left forearm' },
+      { label: 'LANGUAGE', value: 'Hindi · Kannada · English' },
+    ],
+    lastSeenLoc: 'Whitefield, Bengaluru', lastSeenTime: '· 18 Dec 2024 · 11:32 PM',
+    detentionMain: '■ Mar 2021 → Sep 2022 (18mo imprisoned)',
+    detentionRight: 'Free 27mo+',
+    detentionNote: 'Released on: Money Laundering (PoCA) charge — completed sentence',
   },
   'Salim Khan': {
     name: 'Salim Khan', aka: 'a.k.a. "The Operative" · "SK"', ref: 'KP-2024-SK-002',
@@ -90,6 +105,18 @@ const SUSPECT_DOSSIERS: Record<string, Dossier> = {
       { key: 'sims', label: 'PHONE SIMs', value: '2', color: '#06B6D4', sub: 'Swap pattern' },
       { key: 'threat', label: 'THREAT SCORE', value: '84', color: 'var(--risk-high, #F04E4E)', sub: 'out of 100' },
     ],
+    physical: [
+      { label: 'BUILD', value: 'Lean' },
+      { label: 'COMPLEXION', value: 'Medium' },
+      { label: 'HAIR', value: 'Black, cropped' },
+      { label: 'EYES', value: 'Dark brown' },
+      { label: 'MARKS', value: 'Tattoo — right wrist' },
+      { label: 'LANGUAGE', value: 'Urdu · Hindi · Kannada' },
+    ],
+    lastSeenLoc: 'Central Prison, Bengaluru', lastSeenTime: '· In custody since 18 Nov 2023',
+    detentionMain: '■ Nov 2023 → Present (in judicial custody)',
+    detentionRight: 'In custody',
+    detentionNote: 'Held on: Money Laundering (KS1207) — awaiting trial',
   },
 };
 
@@ -117,8 +144,14 @@ export function InvestigationWorkspace({
   lang, progress, isVoice, onEvidenceClick, onGangMemberClick, onActionToast, onCaseClick, role, subjectName,
 }: InvestigationWorkspaceProps) {
   const [activeEvidence, setActiveEvidence] = useState<string | null>(null);
-  // Identity fields swap per queried suspect; default to Mehta (the primary demo dossier).
-  const dossier = SUSPECT_DOSSIERS[subjectName ?? ''] ?? SUSPECT_DOSSIERS['Rajesh Kumar Mehta'];
+  // Identity fields swap per queried suspect. Match on the surname token (case-insensitive)
+  // so any name form — "Salim Khan", "salim khan", "S. Khan", "khan" — resolves correctly;
+  // default to Mehta (the primary demo dossier).
+  const _sn = (subjectName ?? '').toLowerCase();
+  const dossier =
+    _sn.includes('khan') ? SUSPECT_DOSSIERS['Salim Khan']
+    : _sn.includes('mehta') ? SUSPECT_DOSSIERS['Rajesh Kumar Mehta']
+    : SUSPECT_DOSSIERS['Rajesh Kumar Mehta'];
   const statLabel = (s: Dossier['stats'][number]): string => {
     if (s.key === 'activeCases') return t('activeCases', lang);
     if (s.key === 'knownAssociates') return t('knownAssociates', lang);
@@ -288,14 +321,7 @@ export function InvestigationWorkspace({
                 display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px 16px',
               }}>
                 <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.08em', gridColumn: '1/-1', marginBottom: 2 }}>PHYSICAL DESCRIPTION</div>
-                {[
-                  { label: 'BUILD', value: 'Medium' },
-                  { label: 'COMPLEXION', value: 'Fair' },
-                  { label: 'HAIR', value: 'Black, short' },
-                  { label: 'EYES', value: 'Brown' },
-                  { label: 'MARKS', value: 'Scar — left forearm' },
-                  { label: 'LANGUAGE', value: 'Hindi · Kannada · English' },
-                ].map((f, i) => (
+                {dossier.physical.map((f, i) => (
                   <div key={i} style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.06em' }}>{f.label}</div>
                     <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</div>
@@ -307,8 +333,8 @@ export function InvestigationWorkspace({
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '6px 10px', background: 'rgba(240,78,78,0.06)', borderRadius: 4, border: '1px solid rgba(240,78,78,0.15)' }}>
                 <MapPin size={12} color="#F04E4E" />
                 <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#64748B' }}>{t('lastSeen', lang).toUpperCase()}</span>
-                <span style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 600 }}>Whitefield, Bengaluru</span>
-                <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#64748B' }}>· 18 Dec 2024 · 11:32 PM</span>
+                <span style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 600 }}>{dossier.lastSeenLoc}</span>
+                <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#64748B' }}>{dossier.lastSeenTime}</span>
               </div>
 
               {/* Connected crimes + cases in a row */}
@@ -372,10 +398,10 @@ export function InvestigationWorkspace({
             <div style={{ position: 'absolute', left: '40%', top: 0, width: '60%', height: '100%', background: 'rgba(46,204,113,0.3)', borderRadius: '0 4px 4px 0' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: '#FCA5A5' }}>■ Mar 2021 → Sep 2022 (18mo imprisoned)</span>
-            <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: '#86EFAC' }}>■ {t('freeLabel', lang)}</span>
+            <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: '#FCA5A5' }}>{dossier.detentionMain}</span>
+            <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: '#86EFAC' }}>■ {dossier.detentionRight}</span>
           </div>
-          <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>{t('releasedOn', lang)}</div>
+          <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>{dossier.detentionNote}</div>
         </div>
       )}
 

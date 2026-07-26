@@ -141,6 +141,7 @@ export default function App() {
     listening,
     resetTranscript,
     browserSupportsSpeechRecognition,
+    isMicrophoneAvailable,
   } = useSpeechRecognition();
 
   const pendingVoiceQuery = useRef<string | null>(null);
@@ -279,7 +280,10 @@ export default function App() {
   }, [input, submitQuery]);
 
   const handleVoice = useCallback(() => {
-    if (!browserSupportsSpeechRecognition) return;
+    if (!browserSupportsSpeechRecognition) {
+      showToast('Voice input is not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
     if (listening) {
       SpeechRecognition.stopListening();
       const q = finalTranscript.trim();
@@ -289,12 +293,40 @@ export default function App() {
       resetTranscript();
       pendingVoiceQuery.current = null;
       setVoiceState('listening');
-      SpeechRecognition.startListening({
+      // Surface runtime errors from the underlying recognition (permission denial, no-speech,
+      // network) — otherwise they fail completely silently.
+      try {
+        const rec = SpeechRecognition.getRecognition?.();
+        if (rec) {
+          rec.onerror = (e: { error?: string }) => {
+            setVoiceState('idle');
+            const err = e?.error;
+            if (err === 'not-allowed' || err === 'service-not-allowed') {
+              showToast('Microphone access denied. Enable mic permission in the browser address bar and retry.');
+            } else if (err === 'no-speech') {
+              showToast('No speech detected. Tap the mic and speak.');
+            } else if (err) {
+              showToast(`Voice input error: ${err}. Please try again.`);
+            }
+          };
+        }
+      } catch { /* getRecognition unavailable — startListening's catch below still guards */ }
+      // startListening returns a Promise; an uncaught rejection (denied permission, or a
+      // double-start InvalidStateError) was previously swallowed silently.
+      Promise.resolve(SpeechRecognition.startListening({
         continuous: false,
         language: lang === 'kn' ? 'kn-IN' : 'en-IN',
+      })).catch((err: unknown) => {
+        setVoiceState('idle');
+        console.error('[KIRA voice] startListening failed:', err);
+        showToast(
+          isMicrophoneAvailable === false
+            ? 'Microphone unavailable or permission denied. Check browser mic settings.'
+            : 'Could not start voice input. Please try again.'
+        );
       });
     }
-  }, [listening, finalTranscript, lang, resetTranscript, browserSupportsSpeechRecognition, submitQuery]);
+  }, [listening, finalTranscript, lang, resetTranscript, browserSupportsSpeechRecognition, isMicrophoneAvailable, submitQuery, showToast]);
 
   useEffect(() => {
     if (!listening && voiceState === 'listening') {
