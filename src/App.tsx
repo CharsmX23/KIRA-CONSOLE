@@ -484,6 +484,7 @@ ${rows}
               onActionToast={showToast}
               onCaseClick={handleCaseClick}
               role={profile.role}
+              subjectName={subjectName}
             />
           )}
 

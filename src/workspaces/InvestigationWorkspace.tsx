@@ -27,7 +27,71 @@ interface InvestigationWorkspaceProps {
   onActionToast: (msg: string) => void;
   onCaseClick: (caseId: string) => void;
   role?: string;
+  subjectName?: string;
 }
+
+// Per-suspect dossier identity data. The panel's evidence/gang network is shared Cluster K-7
+// context (accurate for both), so only the identity fields swap by subject.
+interface Dossier {
+  name: string; aka: string; ref: string; avatar: string; narrative: string;
+  confidence: string; status: string; statusText: string;
+  mugshotId: string; photoDates: string;
+  bio: { label: string; value: string; color: string }[];
+  stats: { key: string; label: string; value: string; color: string; sub: string }[];
+}
+
+const SUSPECT_DOSSIERS: Record<string, Dossier> = {
+  'Rajesh Kumar Mehta': {
+    name: 'Rajesh Kumar Mehta', aka: 'a.k.a. "The Broker" · "RK"', ref: 'KP-2024-RM-001',
+    avatar: 'RMehta', confidence: '91',
+    narrative: 'R. Mehta is suspected to be part of Cluster K-7. Cross-linking CCTV footage, vehicle logs, phone records, and financial transactions reveals a 91% confidence association. Evidence chain leads from warehouse CCTV to confirmed financial fraud cluster overlap.',
+    status: '#F04E4E', statusText: 'AT LARGE',
+    mugshotId: 'KSP-MG-22847', photoDates: 'Photo: 14 Mar 2021\nLast updated: Sep 2022',
+    bio: [
+      { label: 'AGE', value: '38 years', color: '#E8EDF2' },
+      { label: 'DATE OF BIRTH', value: '14 Mar 1987', color: '#94A3B8' },
+      { label: 'NATIONALITY', value: 'Indian', color: '#94A3B8' },
+      { label: 'HEIGHT / WEIGHT', value: '178 cm / 74 kg', color: '#94A3B8' },
+      { label: 'BLOOD TYPE', value: 'B+', color: '#94A3B8' },
+      { label: 'AADHAR (MASKED)', value: 'XXXX-XXXX-4821', color: '#4D9EF5' },
+      { label: 'PASSPORT', value: 'T9284716 (EXPIRED)', color: '#F5A623' },
+      { label: 'OCCUPATION', value: 'Proprietor, Mehta Exports', color: '#94A3B8' },
+    ],
+    stats: [
+      { key: 'activeCases', label: '', value: '2', color: 'var(--accent-blue, #4D9EF5)', sub: 'Open files' },
+      { key: 'knownAssociates', label: '', value: '7', color: 'var(--risk-high, #F04E4E)', sub: 'Cluster K-7' },
+      { key: 'priorArrests', label: '', value: '3', color: 'var(--risk-medium, #F5A623)', sub: 'Since 2018' },
+      { key: 'vehicles', label: 'KNOWN VEHICLES', value: '2', color: 'var(--accent-purple, #8B6FD4)', sub: 'KA01AB1234' },
+      { key: 'sims', label: 'PHONE SIMs', value: '3', color: '#06B6D4', sub: 'Multiple IDs' },
+      { key: 'threat', label: 'THREAT SCORE', value: '91', color: 'var(--risk-high, #F04E4E)', sub: 'out of 100' },
+    ],
+  },
+  'Salim Khan': {
+    name: 'Salim Khan', aka: 'a.k.a. "The Operative" · "SK"', ref: 'KP-2024-SK-002',
+    avatar: 'SKhan', confidence: '84',
+    narrative: 'Salim Khan is a confirmed operative in Cluster K-7 handling drug logistics and money movement. Phone records tie him to the Electronic City cache (KS1189); financial sub-transfers link him to the KS1207 hawala network. Apprehended at Kempegowda Bus Stand — currently in custody.',
+    status: '#2ECC71', statusText: 'IN CUSTODY',
+    mugshotId: 'KSP-MG-24471', photoDates: 'Photo: 18 Nov 2023\nLast updated: Nov 2024',
+    bio: [
+      { label: 'AGE', value: '34 years', color: '#E8EDF2' },
+      { label: 'DATE OF BIRTH', value: '09 Jul 1991', color: '#94A3B8' },
+      { label: 'NATIONALITY', value: 'Indian', color: '#94A3B8' },
+      { label: 'HEIGHT / WEIGHT', value: '172 cm / 68 kg', color: '#94A3B8' },
+      { label: 'BLOOD TYPE', value: 'O+', color: '#94A3B8' },
+      { label: 'AADHAR (MASKED)', value: 'XXXX-XXXX-7739', color: '#4D9EF5' },
+      { label: 'PASSPORT', value: 'None on record', color: '#F5A623' },
+      { label: 'OCCUPATION', value: 'Logistics Handler', color: '#94A3B8' },
+    ],
+    stats: [
+      { key: 'activeCases', label: '', value: '2', color: 'var(--accent-blue, #4D9EF5)', sub: 'KS1207 · KS1189' },
+      { key: 'knownAssociates', label: '', value: '5', color: 'var(--risk-high, #F04E4E)', sub: 'Cluster K-7' },
+      { key: 'priorArrests', label: '', value: '3', color: 'var(--risk-medium, #F5A623)', sub: 'Since 2019' },
+      { key: 'vehicles', label: 'KNOWN VEHICLES', value: '1', color: 'var(--accent-purple, #8B6FD4)', sub: 'KA05MJ8821' },
+      { key: 'sims', label: 'PHONE SIMs', value: '2', color: '#06B6D4', sub: 'Swap pattern' },
+      { key: 'threat', label: 'THREAT SCORE', value: '84', color: 'var(--risk-high, #F04E4E)', sub: 'out of 100' },
+    ],
+  },
+};
 
 const EVIDENCE_ICONS: Record<string, LucideIcon> = {
   VISUAL: Camera, PHYSICAL: Car, DIGITAL: Smartphone,
@@ -50,9 +114,17 @@ const gangStatusColors: Record<string, { bg: string; text: string }> = {
 };
 
 export function InvestigationWorkspace({
-  lang, progress, isVoice, onEvidenceClick, onGangMemberClick, onActionToast, onCaseClick, role,
+  lang, progress, isVoice, onEvidenceClick, onGangMemberClick, onActionToast, onCaseClick, role, subjectName,
 }: InvestigationWorkspaceProps) {
   const [activeEvidence, setActiveEvidence] = useState<string | null>(null);
+  // Identity fields swap per queried suspect; default to Mehta (the primary demo dossier).
+  const dossier = SUSPECT_DOSSIERS[subjectName ?? ''] ?? SUSPECT_DOSSIERS['Rajesh Kumar Mehta'];
+  const statLabel = (s: Dossier['stats'][number]): string => {
+    if (s.key === 'activeCases') return t('activeCases', lang);
+    if (s.key === 'knownAssociates') return t('knownAssociates', lang);
+    if (s.key === 'priorArrests') return t('priorArrests', lang);
+    return s.label;
+  };
 
   const handleEvidenceClick = (title: string) => {
     setActiveEvidence(prev => prev === title ? null : title);
@@ -109,13 +181,13 @@ export function InvestigationWorkspace({
         }}>
           <Zap size={16} color="#4D9EF5" style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ flex: 1, fontSize: 15, color: '#93C5FD', lineHeight: 1.6 }}>
-            R. Mehta is suspected to be part of Cluster K-7. Cross-linking CCTV footage, vehicle logs, phone records, and financial transactions reveals a 91% confidence association. Evidence chain leads from warehouse CCTV to confirmed financial fraud cluster overlap.
+            {dossier.narrative}
           </div>
           <div style={{
             background: 'rgba(59,130,246,0.15)', borderRadius: 4,
             padding: '4px 8px', fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#93C5FD',
             flexShrink: 0, fontWeight: 700,
-          }}>91% CONF</div>
+          }}>{dossier.confidence}% CONF</div>
         </div>
       )}
 
@@ -132,7 +204,7 @@ export function InvestigationWorkspace({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid #1E2D3D', paddingBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Shield size={13} color="rgba(240,78,78,0.7)" />
-              <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.12em' }}>CRIMINAL DOSSIER — KIRA REF: KP-2024-RM-001</span>
+              <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.12em' }}>CRIMINAL DOSSIER — KIRA REF: {dossier.ref}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span className="blink-fast" style={{ width: 5, height: 5, borderRadius: '50%', background: '#F04E4E', display: 'inline-block' }} />
@@ -145,11 +217,11 @@ export function InvestigationWorkspace({
 
             {/* LEFT — Photo column */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <Avatar name="RMehta" size={220} riskRing="#F04E4E" square />
+              <Avatar name={dossier.avatar} size={220} riskRing={dossier.status} square />
               {/* Status dot */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div className="glow-pulse-red" style={{ width: 9, height: 9, borderRadius: '50%', background: '#F04E4E' }} />
-                <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: '#FCA5A5', fontWeight: 600, letterSpacing: '0.08em' }}>AT LARGE</span>
+                <div className="glow-pulse-red" style={{ width: 9, height: 9, borderRadius: '50%', background: dossier.status }} />
+                <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: dossier.status, fontWeight: 600, letterSpacing: '0.08em' }}>{dossier.statusText}</span>
               </div>
               <div style={{ fontSize: 9, color: '#4A5C70', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, letterSpacing: '0.06em' }}>
                 {t('syntheticId', lang)}
@@ -160,11 +232,13 @@ export function InvestigationWorkspace({
                 padding: '4px 10px', width: '100%', textAlign: 'center',
               }}>
                 <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.12em' }}>MUGSHOT ID</div>
-                <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#4D9EF5', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>KSP-MG-22847</div>
+                <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: '#4D9EF5', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{dossier.mugshotId}</div>
               </div>
               {/* Photo date */}
               <div style={{ fontSize: 9, color: '#4A5C70', fontFamily: "'JetBrains Mono', monospace", textAlign: 'center' }}>
-                Photo: 14 Mar 2021<br />Last updated: Sep 2022
+                {dossier.photoDates.split('\n').map((line, i) => (
+                  <span key={i}>{i > 0 && <br />}{line}</span>
+                ))}
               </div>
             </div>
 
@@ -173,10 +247,10 @@ export function InvestigationWorkspace({
               {/* Name + Risk */}
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 20, fontWeight: 700, color: '#E8EDF2', lineHeight: 1.2, marginBottom: 4 }}>
-                  Rajesh Kumar Mehta
+                  {dossier.name}
                 </div>
                 <div style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic', marginBottom: 8 }}>
-                  a.k.a. "The Broker" · "RK"
+                  {dossier.aka}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <div style={{
@@ -199,16 +273,7 @@ export function InvestigationWorkspace({
                 padding: '10px 12px', marginBottom: 10,
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px',
               }}>
-                {[
-                  { label: 'AGE', value: '38 years', color: '#E8EDF2' },
-                  { label: 'DATE OF BIRTH', value: '14 Mar 1987', color: '#94A3B8' },
-                  { label: 'NATIONALITY', value: 'Indian', color: '#94A3B8' },
-                  { label: 'HEIGHT / WEIGHT', value: '178 cm / 74 kg', color: '#94A3B8' },
-                  { label: 'BLOOD TYPE', value: 'B+', color: '#94A3B8' },
-                  { label: 'AADHAR (MASKED)', value: 'XXXX-XXXX-4821', color: '#4D9EF5' },
-                  { label: 'PASSPORT', value: 'T9284716 (EXPIRED)', color: '#F5A623' },
-                  { label: 'OCCUPATION', value: 'Proprietor, Mehta Exports', color: '#94A3B8' },
-                ].map((f, i) => (
+                {dossier.bio.map((f, i) => (
                   <div key={i} style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', fontWeight: 600, letterSpacing: '0.08em' }}>{f.label}</div>
                     <div style={{ fontSize: 12, color: f.color, marginTop: 1, fontFamily: f.label.includes('AADHAR') || f.label.includes('PASSPORT') ? 'monospace' : 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</div>
@@ -280,20 +345,13 @@ export function InvestigationWorkspace({
 
             {/* RIGHT — Stat boxes */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, width: 110 }}>
-              {[
-                { label: t('activeCases', lang), value: '2', color: 'var(--accent-blue, #4D9EF5)', sub: 'Open files' },
-                { label: t('knownAssociates', lang), value: '7', color: 'var(--risk-high, #F04E4E)', sub: 'Cluster K-7' },
-                { label: t('priorArrests', lang), value: '3', color: 'var(--risk-medium, #F5A623)', sub: 'Since 2018' },
-                { label: 'KNOWN VEHICLES', value: '2', color: 'var(--accent-purple, #8B6FD4)', sub: 'KA01AB1234' },
-                { label: 'PHONE SIMs', value: '3', color: '#06B6D4', sub: 'Multiple IDs' },
-                { label: 'THREAT SCORE', value: '91', color: 'var(--risk-high, #F04E4E)', sub: 'out of 100' },
-              ].map((s, i) => (
+              {dossier.stats.map((s, i) => (
                 <div key={i} style={{
                   background: 'var(--bg-raised, #131920)', border: '1px solid var(--border-default, #243447)',
                   borderRadius: 6, padding: '8px 10px', textAlign: 'center',
                 }}>
                   <div style={{ fontSize: 24, fontFamily: 'var(--font-mono)', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: s.color, lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary, #64748B)', fontWeight: 600, letterSpacing: '0.04em', marginTop: 3 }}>{s.label}</div>
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary, #64748B)', fontWeight: 600, letterSpacing: '0.04em', marginTop: 3 }}>{statLabel(s)}</div>
                   <div style={{ fontSize: 9, color: 'var(--text-muted, #8B9EB5)', marginTop: 1 }}>{s.sub}</div>
                 </div>
               ))}
@@ -449,8 +507,8 @@ export function InvestigationWorkspace({
                       background: '#DC2626', border: '2px solid #7f1d1d',
                       zIndex: 1,
                     }} />
-                    <Avatar name="RMehta" size={56} riskRing="#F04E4E" />
-                    <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#FCA5A5', marginTop: 8 }}>R. MEHTA</div>
+                    <Avatar name={dossier.avatar} size={56} riskRing={dossier.status} />
+                    <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#FCA5A5', marginTop: 8 }}>{dossier.name.toUpperCase()}</div>
                     <div style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", color: '#64748B', marginTop: 3 }}>SUSPECT</div>
                   </div>
                 </>
