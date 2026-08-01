@@ -2,7 +2,7 @@
 
 **AI-Powered Conversational Police Intelligence Platform**
 
-Built for the **Karnataka State Police Hackathon 2026 (KSPH26 / CodeFest)** — Challenge: *"Intelligent Conversational AI for KSP Crime Database"*
+Built for the **Karnataka State Police Hackathon 2026** — Challenge: *"Intelligent Conversational AI for KSP Crime Database"*
 
 🔗 **Live App:** [kira-console.onslate.in](https://kira-console.onslate.in)
 
